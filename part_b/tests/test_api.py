@@ -2,16 +2,26 @@ import pytest
 from fastapi.testclient import TestClient
 
 from imgsearch.api.main import app
+from imgsearch.config import get_settings
 
 
 @pytest.fixture(scope="module")
-def client():
-    with TestClient(app) as c:
-        yield c
+def client(mini_index):
+    # Dùng index mini dựng riêng cho test, không phụ thuộc ../data trên máy đang chạy.
+    out, _ = mini_index
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("INDEX_DIR", str(out))
+        mp.setenv("INDEX_VERSION", "test")
+        get_settings.cache_clear()
+        with TestClient(app) as c:
+            yield c
+    get_settings.cache_clear()
 
 
 def test_healthz_ready(client):
-    assert client.get("/healthz").status_code == 200
+    resp = client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.json()["n_images"] == 26
 
 
 def test_search_returns_server_timing(client):
