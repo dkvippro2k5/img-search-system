@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tìm ảnh người nổi tiếng</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <form id="search-form">
+        <input id="q" name="q" type="search" maxlength="300" autocomplete="off"
+               placeholder="Ví dụ: Đen Vâu, Trấn Thành và Hari Won, con trai Phạm Nhật Vượng" />
+        <button type="submit">Tìm</button>
+      </form>
+      <p id="status" role="status"></p>
+      <section id="reasoning"></section>
+      <section id="results"></section>
+    </main>
+    <script type="module" src="dist/app.js"></script>
+  </body>
+</html>

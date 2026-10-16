@@ -1,0 +1,52 @@
+# --- Dữ liệu: ảnh người thật, KHÔNG đẩy lên GitHub ---
+/data/**
+!/data/**/
+!/data/README.md
+!/data/**/.gitkeep
+*.csv
+*.parquet
+*.npy
+*.f32
+*.faiss
+*.sqlite
+*.sqlite3
+*.db
+*.onnx
+*.webp
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.png
+/models/*
+!/models/README.md
+
+# Báo cáo sinh tự động (giữ thư mục)
+/reports/*
+!/reports/.gitkeep
+!/reports/README.md
+**/bench/results/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Node / web build
+node_modules/
+**/web/dist/
+
+# Môi trường, bí mật
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

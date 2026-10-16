@@ -1,0 +1,16 @@
+# Ngưỡng Phần A. Giá trị ban đầu là giả định, phải chỉnh theo số đo trên dev.
+t0:
+  min_side_px: 200
+  max_aspect_ratio: 3.0
+  min_bytes: 5000
+t1:
+  phash_hamming_max: 6          # vùng giữa (ví dụ 7-10) -> người kiểm tra
+  embed_cosine_dup: 0.95
+  blur_laplacian_min: null      # chỉ ghi điểm, không loại cứng
+t3:
+  identity_target_precision: 0.98
+  nsfw_reject_score: 0.95       # tự loại chỉ khi rất cao; vùng giữa -> gắn cờ
+  watermark_reject_score: 0.9
+  political: flag_only          # không bao giờ tự loại
+t4:
+  budget_fraction: 0.02         # tối đa 1-3% ảnh vào T4

@@ -1,0 +1,12 @@
+[
+  {"type": "single", "query": "Đen Vâu"},
+  {"type": "single", "query": "ho ngoc ha"},
+  {"type": "single", "query": "Mỹ Tâm biểu diễn trên sân khấu"},
+  {"type": "single", "query": "vận động viên cầu lông"},
+  {"type": "single", "query": "nhà văn Sơn Tùng"},
+  {"type": "multi_intent", "query": "Trấn Thành và Hari Won"},
+  {"type": "multi_intent", "query": "ảnh Trấn Thành chụp cùng Hari Won"},
+  {"type": "multi_intent", "query": "ca sĩ nhạc rap và cầu thủ bóng đá"},
+  {"type": "multi_hop", "query": "ảnh con trai chủ tịch Phạm Nhật Vượng"},
+  {"type": "multi_hop", "query": "ảnh vợ của MC Trấn Thành"}
+]

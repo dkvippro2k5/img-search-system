@@ -1,0 +1,60 @@
+# CLAUDE.md
+
+Capstone cá nhân "Image Data Processing & Retrieval" trên tập ảnh **người nổi tiếng Việt Nam** (hạn nộp 22/10/2026). Nguồn sự thật về yêu cầu và quyết định thiết kế:
+
+- [capstone/PLAN.md](capstone/PLAN.md): kế hoạch, phương án, schema, lịch, rủi ro. Đọc mục 11 (đề xuất mặc định) trước khi đổi kiến trúc.
+- [capstone/SCENARIOS.md](capstone/SCENARIOS.md): kịch bản người dùng có mã (L1, E2, M1, H3, Q4, R2, X1...). Test case và comment trong code tham chiếu các mã này.
+
+## Bố cục repo
+
+- `part_b/`: **trọng tâm hiện tại**. Truy xuất ảnh: package `imgsearch`, API, web, Docker, benchmark, test set. Mặc định mọi việc code là ở đây.
+- `part_a/`: kiểm duyệt ảnh. Người dùng đã có prototype riêng và sẽ đưa vào; không viết lại hay tái cấu trúc Phần A trừ khi được yêu cầu.
+- Dùng chung ở gốc: `data/`, `models/`, `reports/`, `docs/`, `capstone/`.
+- **Ranh giới A/B là file, không phải import**: Phần A ghi `data/features/*.parquet|.npy` (khóa `sha256`), Phần B đọc. Hợp đồng file ở [part_a/README.md](part_a/README.md); đổi định dạng thì cập nhật file đó.
+
+## Lệnh (chạy trong `part_b/`)
+
+```bash
+python -m pip install -e ".[dev]"            # thêm ,index để dựng index
+python -m pytest -q                          # toàn bộ test
+python -m pytest tests/test_fusion.py -q     # một file
+ruff check src tests scripts bench && ruff format --check src tests scripts bench
+cd web && npm install && npm run build       # TS -> web/dist/app.js
+uvicorn imgsearch.api.main:app --reload      # http://localhost:8000
+docker compose up -d --build                 # minio + init + api
+docker compose --profile bench run --rm bench && python bench/make_report.py
+```
+
+Máy dev là Windows (PowerShell / Git Bash); `make` có thể không có sẵn, nên dùng lệnh trực tiếp. Python local 3.14, image Docker dùng 3.12; code phải chạy được từ 3.11. Đường dẫn mặc định trong `config.py` (`../data`, `../models`) giả định cwd là `part_b/`.
+
+## Kiến trúc Phần B
+
+- `api/`: FastAPI. `/search` trả `SearchResponse` (kết quả theo **nhóm**, chuỗi bằng chứng `reasoning`, `messages`, `suggestions`) và header `Server-Timing` theo từng bước. `/healthz` trả 503 cho tới khi index nạp xong.
+- `retrieval/`: hướng H2. `engine.py` điều phối: `query_parser` (quy tắc + alias person) -> `lexical` (SQLite FTS5) + `dense` (ONNX text encoder + FAISS flat) -> `fusion.rrf` -> `multi_intent` / `multi_hop`.
+- `data/`: `merge.py` (hợp nhất CSV, khóa `entity_id + sha256`), `entity_merge.py` (entity -> person, bắt buộc cho liên kết person và multi-hop), `schema.sql` (person, entity, image, image_entity, relation, image_fts).
+- `kg/`: cạnh quan hệ từ Wikidata và tiêu đề bài báo (`description`).
+- `scripts/`: job offline merge -> thumbs -> build_index -> upload_s3. `configs/search.yaml`: tham số truy xuất.
+- `web/`: HTML + TS thuần, API phục vụ luôn (`WEB_DIR`), không framework.
+- Index có phiên bản `index/v{INDEX_VERSION}/` trên S3/MinIO/R2 qua `S3_ENDPOINT_URL`.
+
+Đã cài đặt thật: `text/normalize.py`, `retrieval/fusion.py`, `eval/metrics.py`, `api/`, `storage/s3.py`. Các module khác là stub có docstring mô tả yêu cầu; `engine.load()` chưa nạp index và `/search` đang trả rỗng.
+
+## Quy tắc bắt buộc
+
+- **Không commit dữ liệu**: ảnh, CSV, embedding, index, model là dữ liệu người thật hoặc file lớn; `.gitignore` đã chặn. Không thêm ngoại lệ cho chúng.
+- **Quan hệ multi-hop phải có bằng chứng**: mỗi cạnh `relation` có `source` + `evidence`. Không có cạnh thì trả "không tìm thấy bằng chứng quan hệ" và **không trả ảnh**. Không suy quan hệ từ tên, không để LLM trả lời sự kiện, không lấy đáp án từ ví dụ trong tài liệu.
+- **LLM chỉ là parser fallback**: gọi khi quy tắc không phân tích được, timeout 1,5 s, có cache, hết giờ thì quay về quy tắc. Đường trả kết quả không được chờ LLM (mục tiêu p95 < 3 s, server < 150 ms khi không có LLM).
+- **Không đưa torch vào runtime API**: suy luận bằng ONNX Runtime. Thư viện nặng chỉ thêm vào extra `index`.
+- **Tiếng Việt**: luôn khớp cả dạng có dấu và không dấu (`normalize` / `fold`), ưu tiên khớp có dấu. `đ` phải thay riêng thành `d`.
+- **Danh tính**: không dùng tên trong caption VLM làm bằng chứng danh tính; ưu tiên `person_id` từ dữ liệu đã duyệt. Cẩn thận trùng tên ("Sơn Tùng" nhà văn vs "Sơn Tùng M-TP").
+- **Chỉ index ảnh approved**; ảnh trùng giữa entity hiện một lần (E7, Q3); lọc an toàn bật mặc định (Q4).
+- **Đánh giá**: chỉ tinh chỉnh trên `split=dev` của test set; `test` chỉ chạy khi báo cáo.
+- **Số liệu trong tài liệu/báo cáo** gắn nhãn **[Đã đo]** hoặc **[Ước tính]**; không đưa số chưa đo vào báo cáo như số thật.
+- Không có chức năng tìm bằng ảnh khuôn mặt (SCENARIOS X1).
+
+## Quy ước code
+
+- Docstring và comment viết tiếng Việt, ngắn; tham chiếu mục PLAN hoặc mã kịch bản khi liên quan.
+- Ruff, dòng tối đa 100 ký tự. Test trong `part_b/tests/`, đặt tên theo module.
+- Thêm kịch bản mức **B** trong SCENARIOS thì thêm test case tương ứng (JSONL trong `part_b/testsets/`, định dạng ở `part_b/testsets/README.md`).
+- Thứ tự ưu tiên khi thiếu thời gian: dữ liệu hợp nhất -> single-intent + latency -> multi-intent -> multi-hop -> Docker/benchmark -> tài liệu -> deploy/CI.
