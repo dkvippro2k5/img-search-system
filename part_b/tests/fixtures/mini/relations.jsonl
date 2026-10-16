@@ -1,0 +1,3 @@
+{"subj_person": "pham_nhat_vuong", "predicate": "child", "obj_person": "pham_nhat_minh_hoang", "source": "article", "evidence": "Doanh nhân Phạm Nhật Minh Hoàng - con trai thứ 2 của tỷ phú Phạm Nhật Vượng", "evidence_url": "https://example.com/news/pnmh"}
+{"subj_person": "tran_thanh", "predicate": "spouse", "obj_person": "hari_won", "source": "article", "evidence": "Hari Won gặp áp lực khi lần đầu làm MC cùng ông xã Trấn Thành", "evidence_url": "https://example.com/news/tt_hw1"}
+{"subj_person": "my_tam", "predicate": "sibling", "obj_person": "nguoi_khong_ton_tai", "source": "manual", "evidence": "ví dụ lỗi", "evidence_url": null}

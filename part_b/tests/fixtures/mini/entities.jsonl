@@ -1,0 +1,13 @@
+{"entity_id": "e_den", "canonical_name": "Rapper Đen Vâu", "person_id": "den_vau", "merge_method": "name"}
+{"entity_id": "e_hnh", "canonical_name": "Ca sĩ Hồ Ngọc Hà", "person_id": "ho_ngoc_ha", "merge_method": "name"}
+{"entity_id": "e_stm", "canonical_name": "Sơn Tùng M-TP", "person_id": "son_tung_mtp", "merge_method": "name"}
+{"entity_id": "e_stw", "canonical_name": "Nhà văn Sơn Tùng", "person_id": "son_tung_writer", "merge_method": "name"}
+{"entity_id": "e_tt", "canonical_name": "MC Trấn Thành", "person_id": "tran_thanh", "merge_method": "name"}
+{"entity_id": "e_hw", "canonical_name": "Hari Won", "person_id": "hari_won", "merge_method": "name"}
+{"entity_id": "e_pnv1", "canonical_name": "Chân dung studio Phạm Nhật Vượng Forbes", "person_id": "pham_nhat_vuong", "merge_method": "name"}
+{"entity_id": "e_pnv2", "canonical_name": "Doanh nhân Phạm Nhật Vượng phát biểu tại sự kiện VinFast", "person_id": "pham_nhat_vuong", "merge_method": "face"}
+{"entity_id": "e_pnqa", "canonical_name": "Doanh nhân Phạm Nhật Quân Anh", "person_id": "pham_nhat_quan_anh", "merge_method": "name"}
+{"entity_id": "e_mt", "canonical_name": "Ca sĩ Mỹ Tâm", "person_id": "my_tam", "merge_method": "name"}
+{"entity_id": "e_ntl", "canonical_name": "Cầu thủ Nguyễn Tiến Linh", "person_id": "nguyen_tien_linh", "merge_method": "name"}
+{"entity_id": "e_ntli", "canonical_name": "Vận động viên cầu lông Nguyễn Thùy Linh", "person_id": "nguyen_thuy_linh", "merge_method": "name"}
+{"entity_id": "e_unmerged", "canonical_name": "Nhóm nhạc trẻ biểu diễn đường phố", "person_id": null, "merge_method": null}
