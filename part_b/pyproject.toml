@@ -49,6 +49,8 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
+# Danh sách từ vựng tiếng Việt viết dạng "a b c".split() dễ đọc hơn list literal.
+ignore = ["SIM905"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
