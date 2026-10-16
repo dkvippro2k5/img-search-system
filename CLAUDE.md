@@ -37,7 +37,7 @@ Máy dev là Windows (PowerShell / Git Bash); `make` có thể không có sẵn,
 - `web/`: HTML + TS thuần, API phục vụ luôn (`WEB_DIR`), không framework.
 - Index có phiên bản `index/v{INDEX_VERSION}/` trên S3/MinIO/R2 qua `S3_ENDPOINT_URL`.
 
-Đã cài đặt thật: `text/normalize.py`, `retrieval/fusion.py`, `eval/metrics.py`, `api/`, `storage/s3.py`. Các module khác là stub có docstring mô tả yêu cầu; `engine.load()` chưa nạp index và `/search` đang trả rỗng.
+Đã cài đặt thật: `text/normalize.py`, `retrieval/fusion.py`, `retrieval/query_parser.py` (+ `aliases.py`, `lexicon.py`; test theo mã kịch bản ở `tests/test_query_parser.py`), `eval/metrics.py`, `api/`, `storage/s3.py`. Từ vựng (quan hệ, nghề, dấu hiệu cùng xuất hiện…) sửa trong `lexicon.py`, không rải trong code; khi sửa parser phải giữ test cũ qua và thêm test cho kịch bản mới. Các module khác là stub có docstring mô tả yêu cầu; `engine.load()` chưa nạp index và `/search` đang trả rỗng.
 
 ## Quy tắc bắt buộc
 

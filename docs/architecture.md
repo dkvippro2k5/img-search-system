@@ -2,6 +2,8 @@
 
 Khung cho tài liệu nộp cuối. Sơ đồ gốc và phân tích phương án nằm trong [../capstone/PLAN.md](../capstone/PLAN.md); khi điền mục nào thì ghi số liệu kèm nhãn **[Đã đo]** / **[Ước tính]**.
 
+Nhật ký làm việc chi tiết: [worklog/](worklog/).
+
 ## 1. Dữ liệu
 - Nguồn, số ảnh trước/sau dedupe, số entity -> số person.
 - Schema: [part_b/src/imgsearch/data/schema.sql](../part_b/src/imgsearch/data/schema.sql).
