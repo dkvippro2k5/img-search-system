@@ -7,7 +7,8 @@ import time
 
 from imgsearch.api.schemas import SearchRequest, SearchResponse
 from imgsearch.config import Settings
-from imgsearch.retrieval.query_parser import parse
+from imgsearch.retrieval.aliases import AliasIndex
+from imgsearch.retrieval.query_parser import QueryParser
 
 
 class SearchEngine:
@@ -15,9 +16,11 @@ class SearchEngine:
         self.settings = settings
         self.ready = False
         self.n_images = 0
+        self.parser = QueryParser(AliasIndex([]))
 
     def load(self) -> None:
-        """TODO: tải index/v{INDEX_VERSION}/ (meta.sqlite, text.faiss, manifest.json)."""
+        """TODO: tải index/v{INDEX_VERSION}/ (meta.sqlite, text.faiss, manifest.json)
+        và dựng AliasIndex từ bảng person."""
         self.ready = True
 
     def info(self) -> dict:
@@ -27,7 +30,7 @@ class SearchEngine:
         timings: dict[str, float] = {}
 
         t = time.perf_counter()
-        parsed = parse(req.query)
+        parsed = self.parser.parse(req.query)
         timings["parse"] = (time.perf_counter() - t) * 1000
 
         # TODO: retrieve (lexical + dense), fusion, multi-intent / multi-hop, dedupe, lọc an toàn.

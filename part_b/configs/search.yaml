@@ -6,7 +6,6 @@ retrieval:
   person_boost: 1.5
   top_k_default: 30
 multi_intent:
-  co_occurrence_markers: ["cùng", "chung", "với nhau", "chụp cùng"]
   min_per_intent_top10: 2
 llm_parser:
   enabled: false
