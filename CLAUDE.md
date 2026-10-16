@@ -30,14 +30,16 @@ Máy dev là Windows (PowerShell / Git Bash); `make` có thể không có sẵn,
 ## Kiến trúc Phần B
 
 - `api/`: FastAPI. `/search` trả `SearchResponse` (kết quả theo **nhóm**, chuỗi bằng chứng `reasoning`, `messages`, `suggestions`) và header `Server-Timing` theo từng bước. `/healthz` trả 503 cho tới khi index nạp xong.
-- `retrieval/`: hướng H2. `engine.py` điều phối: `query_parser` (quy tắc + alias person) -> `lexical` (SQLite FTS5) + `dense` (ONNX text encoder + FAISS flat) -> `fusion.rrf` -> `multi_intent` / `multi_hop`.
-- `data/`: `merge.py` (hợp nhất CSV, khóa `entity_id + sha256`), `entity_merge.py` (entity -> person, bắt buộc cho liên kết person và multi-hop), `schema.sql` (person, entity, image, image_entity, relation, image_fts).
+- `retrieval/`: hướng H2. `engine.py` điều phối: `query_parser` (quy tắc + alias person) -> `lexical` (BM25 numpy, `bm25.py`; **không dùng FTS5**: đo 100–150 ms/truy vấn trên 80k ảnh, BM25 numpy 4–6 ms) + `dense` (ONNX text encoder + FAISS flat) -> `fusion.rrf` -> `multi_intent` / `multi_hop`.
+- `data/`: `merge.py` (hợp nhất CSV, khóa `entity_id + sha256`), `entity_merge.py` (entity -> person, bắt buộc cho liên kết person và multi-hop), `schema.sql` (person, entity, image, image_entity, image_person, relation), `dataset.py` (định dạng JSONL trung gian giữa merge và build), `build_meta.py` (dựng `index/v{ver}/`: `meta.sqlite` + `lexical.npz` + `manifest.json`). `vec_row` (0..N-1) là chỉ số chung của ảnh cho BM25 và FAISS.
+- `retrieval/store.py`: đọc `meta.sqlite` chỉ đọc, mỗi luồng một kết nối.
+- Dữ liệu giả `tests/fixtures/mini/` (README liệt kê tình huống cài sẵn); `tests/conftest.py` dựng index mini một lần mỗi phiên, test không được đọc `../data`. Chạy thử server: `python scripts/build_index.py --input tests/fixtures/mini --version dev`.
 - `kg/`: cạnh quan hệ từ Wikidata và tiêu đề bài báo (`description`).
 - `scripts/`: job offline merge -> thumbs -> build_index -> upload_s3. `configs/search.yaml`: tham số truy xuất.
 - `web/`: HTML + TS thuần, API phục vụ luôn (`WEB_DIR`), không framework.
 - Index có phiên bản `index/v{INDEX_VERSION}/` trên S3/MinIO/R2 qua `S3_ENDPOINT_URL`.
 
-Đã cài đặt thật: `text/normalize.py`, `retrieval/fusion.py`, `retrieval/query_parser.py` (+ `aliases.py`, `lexicon.py`; test theo mã kịch bản ở `tests/test_query_parser.py`), `eval/metrics.py`, `api/`, `storage/s3.py`. Từ vựng (quan hệ, nghề, dấu hiệu cùng xuất hiện…) sửa trong `lexicon.py`, không rải trong code; khi sửa parser phải giữ test cũ qua và thêm test cho kịch bản mới. Các module khác là stub có docstring mô tả yêu cầu; `engine.load()` chưa nạp index và `/search` đang trả rỗng.
+Đã cài đặt thật: `text/normalize.py`, `retrieval/fusion.py`, `retrieval/query_parser.py` (+ `aliases.py`, `lexicon.py`; test theo mã kịch bản ở `tests/test_query_parser.py`), `retrieval/bm25.py` + `lexical.py` + `store.py`, `data/dataset.py` + `build_meta.py` + `scripts/build_index.py`, `eval/metrics.py`, `api/`, `storage/s3.py`. Từ vựng (quan hệ, nghề, dấu hiệu cùng xuất hiện…) sửa trong `lexicon.py`, không rải trong code; khi sửa parser phải giữ test cũ qua và thêm test cho kịch bản mới. Các module khác là stub có docstring mô tả yêu cầu; `engine.load()` chưa nạp index và `/search` đang trả rỗng.
 
 ## Quy tắc bắt buộc
 

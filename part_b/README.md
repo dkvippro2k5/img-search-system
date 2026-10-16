@@ -5,7 +5,7 @@ Tìm ảnh người nổi tiếng Việt Nam bằng ngôn ngữ tự nhiên: sin
 ```
 src/imgsearch/
   api/        FastAPI: /search, /healthz, /metrics
-  retrieval/  query_parser, lexical (FTS5), dense (ONNX + FAISS), fusion (RRF), multi_intent, multi_hop
+  retrieval/  query_parser, lexical (BM25 numpy), dense (ONNX + FAISS), fusion (RRF), multi_intent, multi_hop
   kg/         quan hệ từ Wikidata và tiêu đề bài báo, mỗi cạnh có bằng chứng
   data/       merge CSV, entity_merge (entity -> person), schema.sql
   eval/       chỉ số, chạy test set
