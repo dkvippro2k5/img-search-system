@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     max_query_chars: int = 300
     result_cache_enabled: bool = True
 
+    @property
+    def index_path(self) -> Path:
+        return self.index_dir / f"v{self.index_version}"
+
 
 @lru_cache
 def get_settings() -> Settings:
