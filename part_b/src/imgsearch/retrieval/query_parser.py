@@ -53,6 +53,8 @@ class Intent:
     text: str
     person_ids: list[str] = field(default_factory=list)
     categories: list[str] = field(default_factory=list)
+    mentions: list[str] = field(default_factory=list)  # tên người như người dùng gõ
+    unknown_names: list[str] = field(default_factory=list)  # tên lạ trong vế này (M5)
 
 
 @dataclass
@@ -117,7 +119,8 @@ class QueryParser:
             for m in mentions
             if m.suggest and not m.ambiguous
         )
-        result.unknown_names = _unknown_names(tokens, blocked)
+        unknown_spans = _unknown_names(tokens, blocked)
+        result.unknown_names = [s.value for s in unknown_spans]
         if neg_spans:
             result.unsupported.append("negation")
         if _has_count(tokens, blocked):
@@ -132,7 +135,7 @@ class QueryParser:
             return result
 
         result.intents, result.co_occurrence = _split_intents(
-            tokens, mentions, cat_spans, conj_spans, has_co_marker=bool(co_spans)
+            tokens, mentions, cat_spans, conj_spans, unknown_spans, has_co_marker=bool(co_spans)
         )
         if len(result.intents) > 1:
             result.type = QueryType.MULTI_INTENT
@@ -249,6 +252,7 @@ def _split_intents(
     mentions: list[Mention],
     cat_spans: list[Span],
     conj_spans: list[Span],
+    unknown_spans: list[Span],
     has_co_marker: bool,
 ) -> tuple[list[Intent], bool]:
     cuts = {s.start for s in conj_spans} | {
@@ -268,18 +272,24 @@ def _split_intents(
             continue
         seg_mentions = [m for m in mentions if s <= m.start < e]
         seg_cats = [c.value for c in cat_spans if s <= c.start < e]
-        # Vế không có người, không có nghề là thuộc tính nối tiếp vế trước:
+        seg_unknown = [u.value for u in unknown_spans if s <= u.start < e]
+        # Vế không có người, nghề hay tên lạ là thuộc tính nối tiếp vế trước:
         # "Hồ Ngọc Hà mặc áo dài và đội nón lá" vẫn là một ý định.
-        if groups and not seg_mentions and not seg_cats:
+        # Vế có tên lạ đứng riêng để báo "không tìm thấy" cho đúng vế đó (M5).
+        if groups and not seg_mentions and not seg_cats and not seg_unknown:
             groups[-1]["words"] += words
             continue
-        groups.append({"words": words, "mentions": seg_mentions, "cats": seg_cats})
+        groups.append(
+            {"words": words, "mentions": seg_mentions, "cats": seg_cats, "unknown": seg_unknown}
+        )
 
     if len(groups) == 1 and len({m.person_ids for m in groups[0]["mentions"]}) > 1:
         # Một vế nhắc nhiều người không qua liên từ ("chụp cùng", "Gia đình A – B"):
         # mỗi người một ý định, nhưng kết quả là ảnh có cả hai.
         g = groups[0]
-        intents = [Intent(m.surface, list(m.person_ids), g["cats"]) for m in g["mentions"]]
+        intents = [
+            Intent(m.surface, list(m.person_ids), g["cats"], [m.surface]) for m in g["mentions"]
+        ]
         return intents, True
 
     intents = [
@@ -287,15 +297,17 @@ def _split_intents(
             " ".join(g["words"]),
             _unique(pid for m in g["mentions"] for pid in m.person_ids),
             _unique(g["cats"]),
+            [m.surface for m in g["mentions"]],
+            g["unknown"],
         )
         for g in groups
     ]
     return intents, has_co_marker and len(intents) > 1
 
 
-def _unknown_names(tokens: list[Token], blocked: list[bool]) -> list[str]:
+def _unknown_names(tokens: list[Token], blocked: list[bool]) -> list[Span]:
     """Chuỗi >= 2 từ viết hoa liền nhau chưa liên kết được: có thể là người không có (E6, X1)."""
-    names, run = [], []
+    spans, run = [], []
     for i, t in enumerate(tokens + [Token("", "", "")]):
         capital = (
             t.is_word
@@ -305,12 +317,12 @@ def _unknown_names(tokens: list[Token], blocked: list[bool]) -> list[str]:
             and t.fold not in lx.STOPWORDS
         )
         if capital:
-            run.append(t.surface)
+            run.append(i)
             continue
         if len(run) >= 2:
-            names.append(" ".join(run))
+            spans.append(Span(run[0], run[-1] + 1, " ".join(tokens[j].surface for j in run)))
         run = []
-    return names
+    return spans
 
 
 def _has_count(tokens: list[Token], blocked: list[bool]) -> bool:

@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     s3_secret_access_key: str | None = None
     s3_region: str = "us-east-1"
     presign_ttl_seconds: int = 600
+    # False: hiển thị bằng image_url gốc (hotlink, PLAN 7.2 [Cần xác nhận]);
+    # True: presigned URL tới thumbs/{sha256[:2]}/{sha256}.webp trên S3.
+    thumbs_from_s3: bool = False
 
     text_encoder: str = "multilingual-e5-small"
     use_image_embedding: bool = False
@@ -31,8 +34,15 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 1.5
 
     safe_search_default: bool = True
+    # Lọc an toàn (Q4). Ngưỡng và tên cờ là giả định, chờ chính sách của mentor.
+    nsfw_block_score: float = 0.8
+    unsafe_flags: list[str] = ["nsfw", "sexual"]
     max_query_chars: int = 300
     result_cache_enabled: bool = True
+
+    # Truy xuất
+    candidate_pool: int = 200  # số ứng viên BM25 mỗi lượt
+    per_person_cap: int = 3  # truy vấn chủ đề: tối đa ảnh mỗi người ở đầu danh sách (S3, L4)
 
     @property
     def index_path(self) -> Path:

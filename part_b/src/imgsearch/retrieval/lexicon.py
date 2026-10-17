@@ -180,3 +180,22 @@ STOPWORDS = {
         "ảnh hình của và với cùng trên tại trong ở mặc là những các một chụp người năm khi lúc đang"
     ).split()
 }
+
+# Nhãn hiển thị trong thông báo / nhóm kết quả.
+PREDICATE_LABELS = {
+    "child": "con",
+    "spouse": "vợ/chồng",
+    "parent": "bố/mẹ",
+    "sibling": "anh chị em",
+    "member_of": "thành viên",
+}
+CATEGORY_LABELS = {
+    "singer": "ca sĩ",
+    "celeb": "người nổi tiếng",
+    "athletes": "vận động viên",
+    "historic": "nhân vật lịch sử",
+    "politicer": "chính khách",
+    "businessman": "doanh nhân",
+    "scientist": "nhà khoa học",
+    "writer": "nhà văn",
+}

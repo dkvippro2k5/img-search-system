@@ -26,8 +26,9 @@ def index_prefix(version: str) -> str:
     return f"index/v{version}/"
 
 
-def presigned_thumb_url(settings: Settings, sha256: str) -> str:
-    return client(settings).generate_presigned_url(
+def presigned_thumb_url(settings: Settings, sha256: str, s3=None) -> str:
+    """Ký URL tạm (không gọi mạng). Truyền `s3` để dùng lại client khi ký nhiều ảnh."""
+    return (s3 or client(settings)).generate_presigned_url(
         "get_object",
         Params={"Bucket": settings.s3_bucket, "Key": thumb_key(sha256)},
         ExpiresIn=settings.presign_ttl_seconds,
