@@ -67,13 +67,33 @@ class Lexicon:
 STRONG_SEPS = {",", ";", "&"}
 DASHES = {"-", "–", "—"}
 
-# Tên chương trình / cụm cố định chứa từ quan hệ nhưng không phải quan hệ (H8).
+# Cụm cố định chứa từ quan hệ nhưng không phải quan hệ: tên chương trình (H8) và từ ghép
+# ("tuyên bố" không phải "bố", "có con với X" không phải "con của X").
 PROTECTED = Lexicon(
     {
         "anh trai say hi": "program",
         "anh trai vượt ngàn chông gai": "program",
         "chị đẹp đạp gió rẽ sóng": "program",
         "chị đẹp đạp gió": "program",
+        **{
+            k: "compound"
+            for k in (
+                "tuyên bố",
+                "công bố",
+                "phân bố",
+                "ban bố",
+                "bố trí",
+                "bố cục",
+                "bố cáo",
+                "có con",
+                "con số",
+                "con đường",
+                "con người",
+                "con giáp",
+                "mẹ thiên nhiên",
+                "cha xứ",
+            )
+        },
     }
 )
 
@@ -125,8 +145,8 @@ RELATIONS = Lexicon(
 RELATION_FILLERS = {
     fold(w)
     for w in (
-        "của thứ hai ba cả út lớn nhỏ ông bà cố chủ tịch tỷ phú doanh nhân mc ca sĩ "
-        "nhạc rapper nhà văn thơ diễn viên danh hài nghệ người mẫu hoa hậu cầu thủ "
+        "của thứ hai ba cả út lớn nhỏ ông bà cố chủ tịch tỷ tỉ phú doanh nhân mc ca sĩ "
+        "nhạc rapper nhà văn thơ diễn viên danh hài nghệ người mẫu hoa á hậu cầu thủ "
         "huấn luyện vận động viên nam nữ"
     ).split()
 }
@@ -198,4 +218,117 @@ CATEGORY_LABELS = {
     "businessman": "doanh nhân",
     "scientist": "nhà khoa học",
     "writer": "nhà văn",
+}
+
+# --- Gộp entity (data/entity_merge.py) ---
+# Cụm mô tả hay đứng đầu tên entity, bỏ đi để lấy tên người:
+# "Sếp Phạm Nhật Vượng Vingroup…", "Tiền vệ Nguyễn Quang Hải", "Streamer Độ Mixi (giữ)".
+ENTITY_PREFIXES = Lexicon(
+    {
+        k: "prefix"
+        for k in (
+            "sếp",
+            "tỷ phú",
+            "tỉ phú",
+            "doanh nhân",
+            "chủ tịch",
+            "ceo",
+            "tiền vệ",
+            "tiền đạo",
+            "hậu vệ",
+            "thủ môn",
+            "cầu thủ",
+            "huấn luyện viên",
+            "tay vợt",
+            "tay vợt cầu lông",
+            "tay vợt tennis",
+            "tay vợt tennis trẻ",
+            "võ sĩ",
+            "vận động viên",
+            "vđv",
+            "kình ngư",
+            "streamer",
+            "youtuber",
+            "tiktoker",
+            "rapper",
+            "ca sĩ",
+            "nhạc sĩ",
+            "mc",
+            "diễn viên",
+            "người mẫu",
+            "siêu mẫu",
+            "hoa hậu",
+            "á hậu",
+            "nhà văn",
+            "nhà thơ",
+            "giáo sư",
+            "gs",
+            "nsnd",
+            "nsưt",
+            "cố",
+            "chân dung",
+            "chân dung studio",
+            "headshot",
+            "toàn thân",
+            "ảnh",
+            "sinh nhật",
+            "surprise",
+            "thổi nến",
+        )
+    }
+)
+# Nhóm nghề coi là "cùng giới": cùng tên + cùng nhóm -> cùng một người.
+# singer và celeb gộp chung vì dữ liệu gán lẫn (Hari Won có entity singer và celeb).
+CATEGORY_FAMILY = {"singer": "ent", "celeb": "ent"}
+# Họ / chữ lót không dùng làm đầu biệt danh hai âm tiết ("Thị Trang", "Văn Bình").
+NOT_ALIAS_START = {fold(w) for w in "thị văn".split()}
+
+# --- Trích quan hệ từ tiêu đề bài báo (kg/article_relations.py) ---
+# Bổ sung cho RELATIONS: cách nói chỉ gặp trong tiêu đề.
+TITLE_RELATIONS = Lexicon({"cưới": "spouse", "kết hôn với": "spouse", "lấy vợ": "spouse"})
+# Từ đứng ngay trước từ quan hệ khiến nó không phải quan hệ thật ("đóng vợ Trấn Thành").
+NON_RELATION_PRECEDERS = {fold(w) for w in "đóng vai".split()}
+
+# Cụm viết hoa nhưng không phải tên người: địa danh, môn thể thao, chương trình, giải đấu.
+# Không dùng làm biệt danh, không coi là "tên người lạ" (E6) và không gộp entity theo chúng.
+NON_PERSON_NAMES = {
+    fold(w)
+    for w in (
+        "Việt Nam",
+        "Hà Nội",
+        "Sài Gòn",
+        "TP HCM",
+        "TP Hồ Chí Minh",
+        "Hồ Chí Minh",
+        "Đà Nẵng",
+        "Hải Phòng",
+        "Cần Thơ",
+        "Huế",
+        "Nha Trang",
+        "Đà Lạt",
+        "Phú Quốc",
+        "Hạ Long",
+        "Vũng Tàu",
+        "Hàn Quốc",
+        "Nhật Bản",
+        "Trung Quốc",
+        "Đài Loan",
+        "Thái Lan",
+        "Hoa Kỳ",
+        "Mỹ",
+        "Pháp",
+        "Muay Thái",
+        "Taekwondo",
+        "Davis Cup",
+        "SEA Games",
+        "Asian Games",
+        "Olympic",
+        "Rap Việt",
+        "Sing My Song",
+        "Anh Trai Say Hi",
+        "Chị Đẹp Đạp Gió",
+        "Miss Universe",
+        "Nhạc Viện",
+        "Nhạc viện Hà Nội",
+    )
 }
