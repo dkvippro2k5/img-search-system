@@ -59,7 +59,7 @@ class ImageEntityRec:
 @dataclass
 class RelationRec:
     subj_person: str
-    predicate: str  # child, spouse, parent, sibling, member_of...
+    predicate: str  # child, spouse, parent, sibling, member_of... (obj là <predicate> của subj)
     obj_person: str
     source: str  # wikidata | article | manual
     evidence: str

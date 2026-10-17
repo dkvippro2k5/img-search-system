@@ -23,21 +23,36 @@ class LexicalIndex:
             raise ValueError(
                 f"lexical.npz có {bm25.n_docs} tài liệu, meta.sqlite có {len(self.image_ids)} ảnh"
             )
+        self.category_rows = {
+            c: np.array(sorted(rows), dtype=np.int64)
+            for c, rows in store.vec_rows_by_category().items()
+        }
 
     @classmethod
     def load(cls, path: str | Path, store: MetaStore) -> "LexicalIndex":
         return cls(BM25Index.load(path), store)
 
     def search(
-        self, text: str, limit: int = 200, person_ids: Collection[str] | None = None
+        self,
+        text: str,
+        limit: int = 200,
+        person_ids: Collection[str] | None = None,
+        categories: Collection[str] | None = None,
     ) -> list[tuple[str, float]]:
-        """Trả [(image_id, điểm)] giảm dần. `person_ids`: chỉ lấy ảnh có ít nhất một person này."""
+        """Trả [(image_id, điểm)] giảm dần.
+
+        `person_ids`: chỉ lấy ảnh có ít nhất một person này. Nếu không có `person_ids`,
+        `categories` giới hạn trong ảnh của person thuộc các nghề đó (S3).
+        """
         terms = query_terms(text)
         if not terms:
             return []
         allowed = None
         if person_ids:
             allowed = np.array(self.store.vec_rows_of(person_ids), dtype=np.int64)
-            if len(allowed) == 0:
-                return []
+        elif categories:
+            parts = [self.category_rows[c] for c in categories if c in self.category_rows]
+            allowed = np.unique(np.concatenate(parts)) if parts else np.empty(0, dtype=np.int64)
+        if allowed is not None and len(allowed) == 0:
+            return []
         return [(self.image_ids[d], s) for d, s in self.bm25.search(terms, limit, allowed)]

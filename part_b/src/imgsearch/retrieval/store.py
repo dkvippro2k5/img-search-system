@@ -55,6 +55,37 @@ class MetaStore:
             )
         ]
 
+    def vec_rows_by_category(self) -> dict[str, list[int]]:
+        """category -> vec_row của ảnh có person thuộc nghề đó. Gọi một lần lúc nạp:
+        truy vấn mỗi lần mất ~100 ms trên 80k ảnh [Đã đo, 17/10]."""
+        out: dict[str, list[int]] = {}
+        for category, row in self.conn.execute(
+            "SELECT DISTINCT p.category, i.vec_row FROM image_person ip "
+            "JOIN image i USING (image_id) JOIN person p USING (person_id) "
+            "WHERE p.category IS NOT NULL"
+        ):
+            out.setdefault(category, []).append(row)
+        return out
+
+    def unsafe_image_ids(self, nsfw_block_score: float, unsafe_flags: Collection[str]) -> set[str]:
+        """Ảnh bị ẩn khi bật lọc an toàn (Q4): điểm NSFW cao hoặc mang cờ nhạy cảm."""
+        marks = ",".join("?" * len(unsafe_flags)) or "NULL"
+        return {
+            r[0]
+            for r in self.conn.execute(
+                f"SELECT image_id FROM image WHERE nsfw_score >= ? OR sensitive_flag IN ({marks})",
+                [nsfw_block_score, *unsafe_flags],
+            )
+        }
+
+    def relations_touching(self, person_id: str) -> list[dict]:
+        """Mọi cạnh có person ở một đầu (cả hai chiều); multi_hop.py chọn chiều cần dùng."""
+        rows = self.conn.execute(
+            "SELECT * FROM relation WHERE subj_person = ? OR obj_person = ?",
+            [person_id, person_id],
+        )
+        return [dict(r) for r in rows]
+
     def images_of(self, person_ids: Collection[str], limit: int | None = None) -> list[str]:
         """Ảnh của các person, theo thứ tự vec_row (TODO: xếp theo điểm chất lượng)."""
         if not person_ids:

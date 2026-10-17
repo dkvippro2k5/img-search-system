@@ -52,6 +52,8 @@ CREATE TABLE image_person (
 ) WITHOUT ROWID;
 
 -- Mỗi cạnh BẮT BUỘC có source + evidence; cạnh không bằng chứng bị loại lúc build.
+-- Chiều: obj là <predicate> của subj. Ví dụ (Phạm Nhật Vượng, child, Phạm Nhật Minh Hoàng)
+-- = Minh Hoàng là con của Phạm Nhật Vượng. Lưu một chiều; tra ngược ở retrieval/multi_hop.py.
 CREATE TABLE relation (
     subj_person   TEXT NOT NULL REFERENCES person(person_id),
     predicate     TEXT NOT NULL,     -- child, spouse, parent, sibling, member_of...
