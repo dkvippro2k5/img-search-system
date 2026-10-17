@@ -17,3 +17,14 @@ button { padding: 10px 16px; font-size: 16px; }
 .group h2 { font-size: 16px; margin: 16px 0 8px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
 .grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; background: var(--border); }
+.hit { margin: 0; }
+.hit figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.hit a, #reasoning a { color: inherit; }
+.kind { font-size: 12px; font-weight: normal; color: var(--muted); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 6px; margin-right: 8px; }
+.message { margin: 4px 0; padding: 8px 12px; border-left: 3px solid var(--border); }
+.suggestion { padding: 0; border: 0; background: none; color: inherit; font-size: inherit;
+  text-decoration: underline; cursor: pointer; }
+#reasoning h2 { font-size: 16px; margin: 16px 0 4px; }
+#reasoning p { margin: 4px 0; }
