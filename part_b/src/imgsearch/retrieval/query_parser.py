@@ -173,6 +173,7 @@ class QueryParser:
     def _link_fuzzy(self, tokens: list[Token], blocked: list[bool]) -> list[Mention]:
         mentions = []
         max_size = min(FUZZY_MAX_WINDOW, self.aliases.max_words + 1)
+        run_of = _capital_runs(tokens)
         for size in range(max_size, 1, -1):
             for block in _word_blocks(tokens):
                 for a in range(len(block) - size + 1):
@@ -181,6 +182,16 @@ class QueryParser:
                     if any(blocked[i] for i in idxs) or any(t.fold in lx.STOPWORDS for t in window):
                         continue
                     if sum(len(t.fold) for t in window) < FUZZY_MIN_CHARS:
+                        continue
+                    # Chỉ sửa chính tả khi trông như tên: viết hoa ("Tran Thnh") hoặc gõ
+                    # không dấu ("tran thnh"). Chữ thường có dấu ("thăng hạng") là từ thường,
+                    # nếu không sẽ khớp nhầm "Thanh Hằng".
+                    capitalized = all(t.surface[:1].isupper() for t in window)
+                    if not capitalized and any(t.has_marks for t in window):
+                        continue
+                    # Cửa sổ viết hoa phải trùm trọn cụm viết hoa chứa nó: "Nguyễn Văn An"
+                    # không khớp được cả cụm thì không lấy riêng "Nguyễn Văn" -> "Nguyễn Văn Tỵ".
+                    if capitalized and run_of.get(idxs[0]) != (idxs[0], idxs[-1] + 1):
                         continue
                     found = self.aliases.fuzzy(window, FUZZY_CUTOFF)
                     if found:
@@ -222,6 +233,28 @@ def _word_blocks(tokens: list[Token]) -> list[list[int]]:
     if cur:
         blocks.append(cur)
     return blocks
+
+
+def _capital_runs(tokens: list[Token]) -> dict[int, tuple[int, int]]:
+    """Chỉ số token -> (đầu, cuối) của cụm từ viết hoa liền nhau chứa nó (bỏ qua gạch nối)."""
+    runs: dict[int, tuple[int, int]] = {}
+    i = 0
+    while i < len(tokens):
+        if tokens[i].is_word and tokens[i].surface[:1].isupper():
+            j = i
+            while j + 1 < len(tokens) and (
+                (tokens[j + 1].is_word and tokens[j + 1].surface[:1].isupper())
+                or tokens[j + 1].norm in lx.DASHES
+            ):
+                j += 1
+            while tokens[j].norm in lx.DASHES:
+                j -= 1
+            for k in range(i, j + 1):
+                runs[k] = (i, j + 1)
+            i = j + 1
+        else:
+            i += 1
+    return runs
 
 
 def _mention(tokens, idxs, ids, match, suggest) -> Mention:
@@ -319,8 +352,9 @@ def _unknown_names(tokens: list[Token], blocked: list[bool]) -> list[Span]:
         if capital:
             run.append(i)
             continue
-        if len(run) >= 2:
-            spans.append(Span(run[0], run[-1] + 1, " ".join(tokens[j].surface for j in run)))
+        text = " ".join(tokens[j].surface for j in run)
+        if len(run) >= 2 and " ".join(tokens[j].fold for j in run) not in lx.NON_PERSON_NAMES:
+            spans.append(Span(run[0], run[-1] + 1, text))
         run = []
     return spans
 

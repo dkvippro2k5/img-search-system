@@ -283,3 +283,27 @@ def test_intent_keeps_mention_surfaces(parser):
     assert p.intents[0].mentions == ["den vau"]
     p = parser.parse("ảnh Trấn Thành chụp cùng Hari Won")
     assert [i.mentions for i in p.intents] == [["Trấn Thành"], ["Hari Won"]]
+
+
+def test_fuzzy_needs_whole_capitalized_run():
+    p = QueryParser(AliasIndex([PersonEntry("ty", "Nguyễn Văn Tỵ")]))
+    # "Nguyễn Văn" giống "Nguyễn Văn Tỵ" 90%, nhưng cả cụm "Nguyễn Văn An" không khớp (E6)
+    r = p.parse("thầy giáo Nguyễn Văn An")
+    assert r.mentions == [] and r.unknown_names == ["Nguyễn Văn An"]
+
+
+def test_no_fuzzy_on_lowercase_accented_words():
+    p = QueryParser(AliasIndex([PersonEntry("h", "Thanh Hằng")]))
+    assert p.parse("nhan sắc thăng hạng").mentions == []
+    assert [m.person_ids for m in p.parse("thanh hangg").mentions] == [("h",)]  # gõ không dấu
+
+
+def test_place_name_is_not_unknown_person(parser):
+    p = parser.parse("Mỹ Tâm ở Hà Nội")
+    assert p.unknown_names == []
+    assert p.intents[0].person_ids == ["my_tam"]
+
+
+def test_compound_word_is_not_relation(parser):
+    p = parser.parse("Trấn Thành tuyên bố")
+    assert p.type == QueryType.SINGLE and p.relation_path == []
