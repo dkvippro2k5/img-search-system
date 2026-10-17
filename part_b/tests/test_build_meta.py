@@ -16,7 +16,7 @@ def test_manifest_counts(mini_index):
     out, manifest = mini_index
     s = manifest["stats"]
     assert s["persons"] == 12
-    assert s["images_indexed"] == 26
+    assert s["images_indexed"] == 27
     assert s["images_skipped_not_approved"] == 2  # den4 rejected, rev1 review
     assert s["images_skipped_duplicate"] == 1  # hnh3
     assert s["image_entity_skipped_image_not_indexed"] == 3
@@ -35,7 +35,7 @@ def test_only_approved_non_duplicate_images_indexed(mini_store):
 
 def test_vec_row_is_dense_and_unique(mini_store):
     rows = [r[0] for r in mini_store.conn.execute("SELECT vec_row FROM image ORDER BY vec_row")]
-    assert rows == list(range(26))
+    assert rows == list(range(27))
 
 
 def test_E4_fragmented_entities_map_to_one_person(mini_store):

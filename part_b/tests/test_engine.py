@@ -8,7 +8,7 @@ def test_engine_loads_index_and_person_aliases(mini_index):
     engine.load()
     info = engine.info()
     assert info["index_loaded"] is True
-    assert info["n_images"] == 26
+    assert info["n_images"] == 27
     assert info["n_persons"] == 12
     parsed = engine.parser.parse("Hà Hồ")
     assert parsed.mentions[0].person_ids == ("ho_ngoc_ha",)

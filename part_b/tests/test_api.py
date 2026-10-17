@@ -21,7 +21,7 @@ def client(mini_index):
 def test_healthz_ready(client):
     resp = client.get("/healthz")
     assert resp.status_code == 200
-    assert resp.json()["n_images"] == 26
+    assert resp.json()["n_images"] == 27
 
 
 def test_search_returns_server_timing(client):
@@ -40,3 +40,16 @@ def test_search_does_not_execute_markup(client):
     resp = client.post("/search", json={"query": "<script>alert(1)</script>"})
     assert resp.status_code == 200
     assert resp.json()["query"] == "<script>alert(1)</script>"
+
+
+def test_search_returns_groups_from_index(client):
+    body = client.post("/search", json={"query": "Trấn Thành và Hari Won"}).json()
+    assert body["query_type"] == "multi_intent"
+    assert [g["kind"] for g in body["groups"]] == ["intent", "intent", "co_occurrence"]
+    assert all(g["hits"] for g in body["groups"])
+
+
+def test_search_relation_has_reasoning(client):
+    body = client.post("/search", json={"query": "vợ của Trấn Thành"}).json()
+    assert body["reasoning"][0]["evidence"]
+    assert body["groups"][0]["kind"] == "relation_target"

@@ -268,3 +268,18 @@ def test_empty_alias_index_still_parses():
     p = QueryParser(AliasIndex([])).parse("Trấn Thành và Hari Won")
     assert p.mentions == []
     assert p.unknown_names == ["Trấn Thành", "Hari Won"]
+
+
+def test_M5_unknown_name_side_is_its_own_intent(parser):
+    p = parser.parse("Đen Vâu và Nguyễn Văn Bình")
+    assert p.type == QueryType.MULTI_INTENT
+    first, second = p.intents
+    assert first.person_ids == ["den_vau"] and first.unknown_names == []
+    assert second.person_ids == [] and second.unknown_names == ["Nguyễn Văn Bình"]
+
+
+def test_intent_keeps_mention_surfaces(parser):
+    p = parser.parse("den vau trên sân khấu")
+    assert p.intents[0].mentions == ["den vau"]
+    p = parser.parse("ảnh Trấn Thành chụp cùng Hari Won")
+    assert [i.mentions for i in p.intents] == [["Trấn Thành"], ["Hari Won"]]

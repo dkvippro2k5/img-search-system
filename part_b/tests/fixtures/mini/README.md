@@ -22,6 +22,7 @@ Tình huống được cài sẵn:
 | Cạnh lỗi bị loại | `my_tam sibling nguoi_khong_ton_tai` |
 | Entity chưa gộp được vào person | `e_unmerged` / ảnh `grp1` |
 | So dấu từng token | `mt4` có "chùa", `hw2` có "chưa" |
+| Q4: lọc an toàn | `hw_nsfw` (Hari Won, `nsfw_score` 0.97): vào index, nhưng bị ẩn khi bật lọc an toàn |
 
 Sinh lại index để chạy thử server (trong `part_b/`):
 
