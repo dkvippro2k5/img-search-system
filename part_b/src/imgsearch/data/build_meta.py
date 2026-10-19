@@ -92,7 +92,7 @@ def _insert_all(conn: sqlite3.Connection, ds: Dataset, stats: Counter) -> None:
     kept = list({img.image_id: img for img in kept}.values())
     kept.sort(key=lambda img: img.image_id)
     conn.executemany(
-        "INSERT INTO image VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO image VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             (
                 i.image_id,
@@ -110,6 +110,7 @@ def _insert_all(conn: sqlite3.Connection, ds: Dataset, stats: Counter) -> None:
                 i.watermark_score,
                 i.sensitive_flag,
                 i.status,
+                i.keywords,
                 row,
             )
             for row, i in enumerate(kept)
@@ -159,7 +160,7 @@ def _insert_all(conn: sqlite3.Connection, ds: Dataset, stats: Counter) -> None:
 
 
 def lexical_texts(meta_path: str | Path) -> list[tuple[str, str, str]]:
-    """(tên + biệt danh person, tiêu đề bài báo + tên entity, caption) theo thứ tự vec_row."""
+    """(tên + biệt danh person, tiêu đề bài báo + tên entity + keywords, caption) theo vec_row."""
     conn = sqlite3.connect(meta_path)
     try:
         names: dict[str, list[str]] = {}
@@ -177,11 +178,11 @@ def lexical_texts(meta_path: str | Path) -> list[tuple[str, str, str]]:
         return [
             (
                 " ".join(dict.fromkeys(names.get(image_id, []))),
-                " ".join([description or "", *entity_names.get(image_id, [])]),
+                " ".join([description or "", *entity_names.get(image_id, []), keywords or ""]),
                 caption or "",
             )
-            for image_id, description, caption in conn.execute(
-                "SELECT image_id, description, caption FROM image ORDER BY vec_row"
+            for image_id, description, caption, keywords in conn.execute(
+                "SELECT image_id, description, caption, keywords FROM image ORDER BY vec_row"
             )
         ]
     finally:

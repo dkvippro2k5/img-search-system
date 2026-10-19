@@ -22,10 +22,8 @@ from imgsearch.data.dataset import (
     PersonRec,
     RelationRec,
 )
-from imgsearch.data.entity_merge import EntityInput, merge_entities
-from imgsearch.kg.article_relations import extract_relations
-from imgsearch.retrieval.aliases import AliasIndex, PersonEntry
-from imgsearch.retrieval.query_parser import QueryParser
+from imgsearch.data.entity_merge import EntityInput
+from imgsearch.data.merge import attach_persons, attach_title_relations
 
 MODES = ("auto", "oracle")
 
@@ -72,50 +70,20 @@ def _merge_into(rows: list[dict], ds: Dataset, id_prefix: str = "") -> dict:
     """Gộp entity của `rows` bằng tên và ghi person, entity, image_entity vào ds."""
     n_images = Counter(r["entity_id"] for r in rows)
     first = {r["entity_id"]: r for r in rows}
-    result = merge_entities(
-        [
-            EntityInput(eid, first[eid]["entity_name"], first[eid].get("category"), n)
-            for eid, n in n_images.items()
-        ]
-    )
-    ds.persons += [
-        PersonRec(id_prefix + p.person_id, p.name, p.category, p.aliases) for p in result.persons
-    ]
-    sub_ids: dict[str, list[str]] = {}
-    for eid, pids in result.entity_persons.items():
-        pids = [id_prefix + pid for pid in pids]
-        name = first[eid]["entity_name"]
-        if len(pids) == 1:
-            ds.entities.append(EntityRec(eid, name, pids[0], result.methods[eid]))
-            sub_ids[eid] = [eid]
-        else:  # entity nhắc nhiều người (ảnh nhóm): mỗi người một entity con
-            sub_ids[eid] = [f"{eid}#{i}" for i in range(len(pids))]
-            ds.entities += [
-                EntityRec(sid, name, pid, result.methods[eid])
-                for sid, pid in zip(sub_ids[eid], pids, strict=True)
-            ]
-    for r in rows:
-        ds.image_entity += [
-            ImageEntityRec(r["sha256"], sid, r.get("review_status"), r.get("reject_reason"))
-            for sid in sub_ids[r["entity_id"]]
-        ]
-    return {
-        "entities": len(n_images),
-        "merge_methods": dict(Counter(result.methods.values())),
-        "multi_person_entities": sum(len(p) > 1 for p in result.entity_persons.values()),
+    entities = {
+        eid: EntityInput(eid, first[eid]["entity_name"], first[eid].get("category"), n)
+        for eid, n in n_images.items()
     }
+    links = [
+        (r["sha256"], r["entity_id"], r.get("review_status"), r.get("reject_reason")) for r in rows
+    ]
+    return attach_persons(ds, entities, links, id_prefix)
 
 
 def _auto(rows: list[dict], ds: Dataset) -> dict:
     report = _merge_into(rows, ds)
-    parser = QueryParser(
-        AliasIndex(
-            PersonEntry(p.person_id, p.name, p.category, tuple(p.aliases)) for p in ds.persons
-        )
-    )
     titles = list(dict.fromkeys((r["source_title"], r.get("source_url")) for r in rows))
-    ds.relations = extract_relations(titles, parser)
-    report["relations"] = len(ds.relations)
+    report["relations"] = attach_title_relations(ds, titles)
     return report
 
 

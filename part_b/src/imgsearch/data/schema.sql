@@ -32,6 +32,7 @@ CREATE TABLE image (
     watermark_score  REAL,
     sensitive_flag   TEXT,
     status           TEXT,             -- approved | rejected | review
+    keywords         TEXT,             -- query crawler, slug URL (data/merge.py), chỉ để tìm
     vec_row          INTEGER UNIQUE    -- vị trí trong FAISS (0..N-1)
 );
 

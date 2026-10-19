@@ -39,6 +39,7 @@ class ImageRec:
     phash: str | None = None
     caption: str | None = None  # VLM của mentor
     description: str | None = None  # tiêu đề bài báo nguồn
+    keywords: str | None = None  # văn bản làm giàu khi chưa có caption (merge.py), chỉ để tìm
     source_url: str | None = None
     quality_flags: str | None = None
     nsfw_score: float | None = None
