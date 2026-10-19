@@ -4,13 +4,19 @@ Tên entity trong dữ liệu thường là cụm mô tả: "Sếp Phạm Nhật
 "Streamer Độ Mixi (giữ)", "Trấn Thành & Hari Won cặp đôi". Các bước:
 
 1. Tách tên: bỏ phần sau " - ", tách ngoặc, bỏ cụm mô tả đầu tên (lexicon.ENTITY_PREFIXES).
-   Trong ngoặc là 2–4 từ viết hoa thì coi là biệt danh ("Phùng Thanh Độ (Độ Mixi)").
+   Trong ngoặc là 2–4 từ viết hoa và một trong hai tên dài >= 3 từ thì coi là biệt danh
+   ("Phùng Thanh Độ (Độ Mixi)", "Will (Nguyễn Anh Tuấn)"); "Anh Tú (The Voice)" thì không.
 2. Entity "sạch" (chỉ còn từ viết hoa) tạo cụm theo (tên, nhóm nghề). Cùng tên khác nhóm nghề
-   là người khác nhau ("Quang Hải" cầu thủ / ca sĩ / nhạc trưởng). Biệt danh trỏ về cùng cụm.
+   là người khác nhau ("Quang Hải" cầu thủ / ca sĩ / nhạc trưởng). Biệt danh chỉ dùng để tra,
+   KHÔNG gộp hai cụm đã có (một biệt danh trỏ hai cụm thì bỏ): tránh nối chuỗi nhiều người
+   qua một tên chương trình, ban nhạc.
 3. Tên 2 âm tiết là đuôi của đúng một tên dài hơn cùng nhóm nghề thì gộp
    ("Quang Hải" -> "Nguyễn Quang Hải").
-4. Entity còn lại: tìm các tên đã biết nằm trong nó (dài nhất trước). Thấy nhiều người thì gắn
-   cho tất cả ("Trấn Thành & Hari Won cặp đôi"); không thấy ai thì lấy cụm từ viết hoa dài nhất.
+4. Entity còn lại: tìm các tên đã biết (>= 2 từ) nằm trong nó, dài nhất trước. Thấy nhiều người
+   thì gắn cho tất cả ("Trấn Thành & Hari Won cặp đôi"); không thấy ai thì lấy cụm từ viết hoa
+   dài nhất.
+
+Khóa so khớp GIỮ DẤU: "Tuấn Hưng" và "Tuấn Hùng" là hai người.
 
 Giới hạn: không sửa được lỗi gán entity (ảnh ca sĩ dưới entity "Sơn Tùng" nhà văn, E8), không
 tách được entity trộn hai người; cần so khuôn mặt (Phần A). Mỗi entity ghi `method` để rà lại.
@@ -59,8 +65,13 @@ class ParsedName:
 
 
 def key_of(words: list[str]) -> tuple[str, ...]:
-    """Khóa so khớp: không dấu, chữ thường, bỏ gạch nối ("M-TP" = "MTP")."""
-    return tuple(strip_diacritics(w.lower()).replace("-", "") for w in words)
+    """Khóa so khớp: chữ thường, giữ dấu, bỏ gạch nối ("M-TP" = "MTP")."""
+    return tuple(nfc(w.lower()).replace("-", "") for w in words)
+
+
+def id_of(words: list[str]) -> str:
+    """person_id ASCII: "p_son_tung_mtp"."""
+    return "p_" + "_".join(strip_diacritics(w.lower()).replace("-", "") for w in words)
 
 
 def _is_name_word(w: str) -> bool:
@@ -76,6 +87,10 @@ def _family(category: str | None) -> str:
 
 
 def _strip_prefixes(words: list[str]) -> list[str]:
+    while len(words) > 1 and "-" in words[0]:
+        if not all(p.lower() in lx.ACADEMIC_TITLES for p in words[0].split("-")):
+            break
+        words = words[1:]
     while words:
         tokens = [Token(w, w.lower(), strip_diacritics(w.lower())) for w in words]
         span = lx.ENTITY_PREFIXES.match_at(tokens, 0, [False] * len(tokens))
@@ -97,6 +112,7 @@ def parse_name(name: str) -> ParsedName:
             w = _WORD.findall(part)
             if (
                 2 <= len(w) <= 4
+                and max(len(w), len(words)) >= 3
                 and all(_is_name_word(x) and not x.isupper() for x in w)
                 and not _is_non_person(w)
             ):
@@ -147,6 +163,8 @@ class _Merger:
         self.clusters: list[_Cluster] = []
         self.parent: list[int] = []
         self.index: dict[tuple[str, ...], dict[str, int]] = defaultdict(dict)
+        self.main_keys: set[tuple[tuple[str, ...], str]] = set()  # tên chính của entity sạch
+        self.bad_alias: set[tuple[tuple[str, ...], str]] = set()  # biệt danh trỏ >= 2 cụm
 
     def find(self, c: int) -> int:
         while self.parent[c] != c:
@@ -167,14 +185,26 @@ class _Merger:
         self.clusters.append(_Cluster(family))
         self.parent.append(len(self.clusters) - 1)
         self.index[key][family] = len(self.clusters) - 1
+        self.main_keys.add((key, family))
         return len(self.clusters) - 1
 
-    def register_alias(self, key: tuple[str, ...], family: str, c: int) -> None:
+    def register_alias(self, key: tuple[str, ...], family: str, c: int) -> bool:
+        """Biệt danh trùng tên chính của cụm khác -> gộp ("Phùng Thanh Độ (Độ Mixi)" + "Độ Mixi").
+        Hai biệt danh trùng nhau ở hai cụm -> mơ hồ, bỏ cả hai, KHÔNG gộp. Trả True nếu giữ."""
+        if (key, family) in self.bad_alias:
+            return False
         existing = self.index[key].get(family)
         if existing is None:
             self.index[key][family] = c
-        else:
-            self.union(c, existing)
+            return True
+        if (key, family) in self.main_keys:
+            self.union(existing, c)
+            return True
+        if self.find(existing) == self.find(c):
+            return True
+        del self.index[key][family]
+        self.bad_alias.add((key, family))
+        return False
 
     def lookup(self, key: tuple[str, ...], family: str) -> int | None:
         options = self.index.get(key)
@@ -200,6 +230,7 @@ def merge_entities(entities: list[EntityInput]) -> MergeResult:
         cl.entity_ids.append(e.entity_id)
 
     # 1-2. Entity sạch tạo cụm; biệt danh trong ngoặc trỏ về cùng cụm.
+    pending_aliases: list[tuple[list[list[str]], str, int]] = []
     ordered = sorted(entities, key=lambda e: (-e.n_images, e.entity_id))
     for e in ordered:
         p = parsed[e.entity_id]
@@ -207,12 +238,15 @@ def merge_entities(entities: list[EntityInput]) -> MergeResult:
             continue
         family = _family(e.category)
         c = m.cluster_for(key_of(p.words), family)
-        for alias in p.aliases:
-            m.register_alias(key_of(alias), family, c)
-            m.clusters[c].aliases.add(" ".join(alias))
         attach(c, e, " ".join(p.words))
         assigned[e.entity_id] = [c]
         methods[e.entity_id] = "name"
+        pending_aliases.append((p.aliases, family, c))
+    # Biệt danh đăng ký sau khi mọi tên chính đã có cụm, để không chiếm chỗ của tên thật.
+    for aliases, family, c in pending_aliases:
+        for alias in aliases:
+            if m.register_alias(key_of(alias), family, c):
+                m.clusters[m.find(c)].aliases.add(" ".join(alias))
 
     # 3. "Quang Hải" -> "Nguyễn Quang Hải" nếu là đuôi của đúng một tên dài hơn cùng nhóm nghề.
     by_suffix: dict[tuple[str, ...], list[tuple[str, ...]]] = defaultdict(list)
@@ -242,8 +276,8 @@ def merge_entities(entities: list[EntityInput]) -> MergeResult:
         found, i = [], 0
         while i < len(keys):
             for size in range(min(max_len, len(keys) - i), 0, -1):
-                # Tên một từ chỉ nhận khi từ đó viết hoa trong entity; bỏ địa danh, môn thể thao.
-                if size == 1 and not _is_name_word(p.words[i]):
+                # Tên một từ ("Nghệ", "Vũ") khớp nhầm quá nhiều: chỉ nhận tên >= 2 từ.
+                if size == 1:
                     continue
                 if _is_non_person(p.words[i : i + size]):
                     continue
@@ -290,7 +324,7 @@ def _build(m: _Merger, entities, assigned, methods) -> MergeResult:
         for form in [name, *cl.forms]:
             aliases.update(derived_aliases(form.split()))
         aliases.discard(name)
-        pid = "p_" + "_".join(key_of(name.split()))
+        pid = id_of(name.split())
         if pid in used_ids:
             pid = f"{pid}_{cl.family or 'x'}"
         n = 2

@@ -127,3 +127,41 @@ def test_derived_aliases():
     assert derived_aliases("Vũ Thị Trang".split()) == []  # không gọi "Thị Trang"
     assert derived_aliases("Lý Hoàng Nam Davis Cup".split()) == []  # không phải tên người
     assert derived_aliases("Hari Won".split()) == []
+
+
+# --- lỗi gặp khi chạy trên 8k entity thật ---
+
+
+def test_show_name_in_parens_does_not_chain_people():
+    r = merge_entities(
+        [
+            EntityInput("a", "Anh Tú (The Voice)", "singer"),
+            EntityInput("b", "Minh Hằng (The Voice)", "singer"),
+            EntityInput("c", "Nguyễn Văn Bình (Next Top Model)", "celeb"),
+            EntityInput("d", "Trần Thị Lan (Next Top Model)", "celeb"),
+        ]
+    )
+    assert len({tuple(v) for v in r.entity_persons.values()}) == 4
+
+
+def test_names_differing_only_in_tone_marks_stay_apart():
+    r = merge_entities(
+        [EntityInput("a", "Tuấn Hưng", "singer"), EntityInput("b", "Trần Tuấn Hùng", "singer")]
+    )
+    assert r.entity_persons["a"] != r.entity_persons["b"]
+
+
+def test_one_word_name_does_not_absorb_descriptive_entities():
+    r = merge_entities(
+        [
+            EntityInput("a", "Nghệ", "singer"),
+            EntityInput("b", "Nghệ nhân Ba Tu (đờn kìm)", "singer"),
+            EntityInput("c", "Nghệ nhân Kray Sức", "singer"),
+        ]
+    )
+    assert len({tuple(v) for v in r.entity_persons.values()}) == 3
+
+
+def test_hyphenated_academic_title_is_stripped():
+    assert parse_name("GS-TS Trần Quang Hải").words == ["Trần", "Quang", "Hải"]
+    assert parse_name("Sơn Tùng M-TP").words == ["Sơn", "Tùng", "M-TP"]
