@@ -38,9 +38,15 @@ class Lexicon:
             key=lambda e: len(e[0]),
             reverse=True,  # cụm dài khớp trước: "con trai" trước "con"
         )
+        # Chỉ mục theo token đầu (dạng bỏ dấu): mỗi vị trí chỉ thử vài mục thay vì cả từ điển.
+        self._by_first: dict[str, list[tuple[tuple[str, ...], tuple[str, ...], str]]] = {}
+        for e in self._entries:
+            self._by_first.setdefault(e[1][0], []).append(e)
 
     def match_at(self, tokens: list[Token], i: int, blocked: list[bool]) -> Span | None:
-        for norm_key, fold_key, value in self._entries:
+        if i >= len(tokens):
+            return None
+        for norm_key, fold_key, value in self._by_first.get(tokens[i].fold, ()):
             k = len(norm_key)
             seq = tokens[i : i + k]
             if len(seq) < k or any(blocked[i : i + k]) or not all(t.is_word for t in seq):
@@ -92,6 +98,28 @@ PROTECTED = Lexicon(
                 "con giáp",
                 "mẹ thiên nhiên",
                 "cha xứ",
+                "người con",
+                "sinh con",
+                "đám cưới",
+                "lễ cưới",
+                "tiệc cưới",
+                "ảnh cưới",
+                "váy cưới",
+                "áo cưới",
+                "thiệp cưới",
+                # họ hàng bên vợ/chồng: không phải vợ/chồng/con
+                "chị vợ",
+                "em vợ",
+                "anh vợ",
+                "bố vợ",
+                "mẹ vợ",
+                "chị chồng",
+                "em chồng",
+                "anh chồng",
+                "bố chồng",
+                "mẹ chồng",
+                "con dâu",
+                "con rể",
             )
         },
     }
@@ -263,6 +291,8 @@ ENTITY_PREFIXES = Lexicon(
             "nhà thơ",
             "giáo sư",
             "gs",
+            "pgs",
+            "ts",
             "nsnd",
             "nsưt",
             "cố",
@@ -277,6 +307,8 @@ ENTITY_PREFIXES = Lexicon(
         )
     }
 )
+# Học hàm / học vị viết liền bằng gạch nối ở đầu tên: "GS-TS Trần Quang Hải".
+ACADEMIC_TITLES = {"gs", "pgs", "ts", "ths", "bs", "ks", "ns", "nsnd", "nsưt"}
 # Nhóm nghề coi là "cùng giới": cùng tên + cùng nhóm -> cùng một người.
 # singer và celeb gộp chung vì dữ liệu gán lẫn (Hari Won có entity singer và celeb).
 CATEGORY_FAMILY = {"singer": "ent", "celeb": "ent"}
@@ -285,9 +317,57 @@ NOT_ALIAS_START = {fold(w) for w in "thị văn".split()}
 
 # --- Trích quan hệ từ tiêu đề bài báo (kg/article_relations.py) ---
 # Bổ sung cho RELATIONS: cách nói chỉ gặp trong tiêu đề.
-TITLE_RELATIONS = Lexicon({"cưới": "spouse", "kết hôn với": "spouse", "lấy vợ": "spouse"})
+TITLE_RELATIONS = Lexicon(
+    {
+        "cưới": "spouse",
+        "kết hôn với": "spouse",
+        "lấy vợ": "spouse",
+        "làm vợ": "spouse",
+        "làm chồng": "spouse",
+    }
+)
 # Từ đứng ngay trước từ quan hệ khiến nó không phải quan hệ thật ("đóng vợ Trấn Thành").
 NON_RELATION_PRECEDERS = {fold(w) for w in "đóng vai".split()}
+# Từ quan hệ luôn nói về chủ ngữ của câu ("X … cùng ông xã Y" = Y là chồng X), khác "vợ",
+# "em trai" (thường là của người đứng sau). Cùng với TITLE_RELATIONS.
+SELF_RELATIONS = {"ông xã", "bà xã"}
+# Từ được phép nằm giữa X và từ quan hệ ở dạng đồng vị: "Bà X - Người vợ kín tiếng của Y",
+# "X là con trai của Y", "X, con gái nhạc sĩ Y".
+APPOSITION_WORDS = RELATION_FILLERS | {fold(w) for w in "là người anh chị cô chú bác cụ".split()}
+# Từ đứng ngay trước một tên khiến nó là địa danh, không phải người ("TP. Hồ Chí Minh").
+PLACE_PRECEDERS = {fold(w) for w in "tp tỉnh quận huyện phố đường trường sân".split()}
+# Đuôi tiêu đề là tên báo ("… - Báo Người Lao Động", "… | Báo Dân trí"): cắt trước khi trích.
+PUBLISHER_MARKERS = tuple(
+    fold(w)
+    for w in (
+        "báo",
+        "tạp chí",
+        "vnexpress",
+        "dân trí",
+        "ngôi sao",
+        "zing",
+        "znews",
+        "tuổi trẻ",
+        "thanh niên",
+        "kenh14",
+        "vietnamnet",
+        "vtv",
+        "vov",
+        "tiền phong",
+        "người lao động",
+        "afamily",
+        "eva",
+        "2sao",
+        "saostar",
+        "soha",
+        "cafef",
+        "lao động",
+        "pháp luật",
+        "giải trí",
+        "nhịp sống",
+        "thể thao",
+    )
+)
 
 # Cụm viết hoa nhưng không phải tên người: địa danh, môn thể thao, chương trình, giải đấu.
 # Không dùng làm biệt danh, không coi là "tên người lạ" (E6) và không gộp entity theo chúng.
@@ -317,6 +397,7 @@ NON_PERSON_NAMES = {
         "Hoa Kỳ",
         "Mỹ",
         "Pháp",
+        "Ấn Độ",
         "Muay Thái",
         "Taekwondo",
         "Davis Cup",

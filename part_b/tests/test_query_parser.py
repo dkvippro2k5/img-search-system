@@ -307,3 +307,10 @@ def test_place_name_is_not_unknown_person(parser):
 def test_compound_word_is_not_relation(parser):
     p = parser.parse("Trấn Thành tuyên bố")
     assert p.type == QueryType.SINGLE and p.relation_path == []
+
+
+def test_lowercase_accented_words_are_not_a_misaccented_name():
+    p = QueryParser(AliasIndex([PersonEntry("vd", "Vân Đông", "athletes")]))
+    r = p.parse("vận động viên cầu lông")
+    assert r.mentions == [] and r.intents[0].categories == ["athletes"]
+    assert [m.person_ids for m in p.parse("Vận Động").mentions] == [("vd",)]  # viết hoa: gợi ý

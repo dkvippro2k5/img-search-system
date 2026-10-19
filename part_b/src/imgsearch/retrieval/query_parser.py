@@ -155,7 +155,17 @@ class QueryParser:
                     # tránh "ảnh tư liệu đen trắng" bị hiểu là rapper Đen.
                     if size == 1 and n_words > 1 and not tokens[idxs[0]].surface[:1].isupper():
                         continue
-                    found = self.aliases.lookup([tokens[i] for i in idxs])
+                    window = [tokens[i] for i in idxs]
+                    found = self.aliases.lookup(window)
+                    # Chữ thường, có dấu nhưng sai dấu so với tên: là từ thường ("vận động"
+                    # không phải "Vân Đông"). Viết hoa hoặc không dấu thì vẫn nhận + gợi ý.
+                    if (
+                        found
+                        and found[1] == MatchType.FOLDED
+                        and any(t.has_marks for t in window)
+                        and not all(t.surface[:1].isupper() for t in window)
+                    ):
+                        continue
                     if found:
                         hit = (idxs, *found)
                         break
