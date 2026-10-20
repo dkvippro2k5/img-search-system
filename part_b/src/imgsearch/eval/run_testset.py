@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from imgsearch.api.schemas import SearchRequest, SearchResponse
-from imgsearch.config import Settings
 from imgsearch.eval.metrics import (
     intent_coverage_at_k,
     min_intent_share_at_k,
@@ -30,7 +29,7 @@ from imgsearch.eval.metrics import (
     precision_at_k,
     reciprocal_rank,
 )
-from imgsearch.eval.pooling import CONFIGS, config
+from imgsearch.eval.pooling import CONFIGS, available, config, eval_settings
 from imgsearch.eval.run_eval import flatten, judge_behavior
 from imgsearch.eval.testset import TestQuery, load_labels, load_testset
 from imgsearch.retrieval.engine import SearchEngine
@@ -281,7 +280,9 @@ def render(meta: dict, runs: dict[str, list[dict]], main_cfg: str) -> str:
             "## So sánh cấu hình (cùng split)",
             "",
             "`bm25`: chỉ BM25; `w2`: BM25 + dense ảnh SigLIP2, trọng số RRF 2 (mặc định); "
-            "`w8`: dense gần như át BM25. Chỉ khác ở truy vấn có phần mô tả.",
+            "`w8`: dense gần như át BM25; `w2+t0.5`: thêm dense văn bản qwen3 (mentor) "
+            "trọng số 0,5. "
+            "Chỉ khác ở truy vấn có phần mô tả.",
             "",
             "| Cấu hình | Loại | Có điểm | P@10 | P@10 (nhãn 2) | P@R | R@50 | nDCG@10 | MRR |",
             "|---|---|---|---|---|---|---|---|---|",
@@ -335,23 +336,27 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--index-version", required=True)
     ap.add_argument("--split", choices=("dev", "test", "all"), default="dev")
     ap.add_argument(
-        "--configs", default="w2,bm25,w8", help=f"trong {list(CONFIGS)}; cái đầu là cấu hình chính"
+        "--configs",
+        default=None,
+        help=f"trong {list(CONFIGS)}, cách nhau dấu phẩy; cái đầu là cấu hình chính. Mặc định: "
+        "mọi cấu hình engine chạy được, chính = w2+t0.5 nếu có kênh văn bản, không thì w2",
     )
     ap.add_argument("--out", type=Path, default=None, help="mặc định ../reports/eval_<split>.md")
     args = ap.parse_args(argv)
 
-    engine = SearchEngine(
-        Settings(_env_file=None, index_dir=args.index_dir, index_version=args.index_version)
-    )
+    engine = SearchEngine(eval_settings(index_dir=args.index_dir, index_version=args.index_version))
     engine.load()
     if engine.store is None:
         raise SystemExit(f"Không thấy index {args.index_dir}/v{args.index_version}")
     queries = [q for q in load_testset(args.testset) if args.split in ("all", q.split)]
     labels = load_labels(args.labels)
     pool = [q for q in queries if q.gt == "pool"]
-    configs = [c for c in args.configs.split(",") if c]
-    if engine.dense is None:
-        configs = ["bm25"]
+    ok = available(engine)
+    if args.configs:
+        configs = [c for c in args.configs.split(",") if c in ok]
+    else:
+        main_cfg = next(c for c in ("w2+t0.5", "w2", "bm25") if c in ok)
+        configs = [main_cfg, *(c for c in ok if c != main_cfg)]
     runs = {}
     for cfg in configs:
         with config(engine, cfg):

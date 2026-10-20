@@ -10,8 +10,7 @@ import argparse
 import json
 from pathlib import Path
 
-from imgsearch.config import Settings
-from imgsearch.eval.pooling import CONFIGS, pool
+from imgsearch.eval.pooling import available, eval_settings, pool
 from imgsearch.eval.testset import load_testset
 from imgsearch.retrieval.engine import SearchEngine
 
@@ -25,9 +24,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--depth", type=int, default=20)
     args = ap.parse_args(argv)
 
-    engine = SearchEngine(
-        Settings(_env_file=None, index_dir=args.index_dir, index_version=args.index_version)
-    )
+    engine = SearchEngine(eval_settings(index_dir=args.index_dir, index_version=args.index_version))
     engine.load()
     if engine.store is None or engine.dense is None:
         raise SystemExit("cần index có dense.npz và model dense để gộp đủ cấu hình")
@@ -65,7 +62,8 @@ def main(argv: list[str] | None = None) -> None:
         "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8"
     )
     print(
-        f"{len(rows)} truy vấn, {sum(sizes)} ảnh cần chấm (cấu hình {', '.join(CONFIGS)}, "
+        f"{len(rows)} truy vấn, {sum(sizes)} ảnh cần chấm "
+        f"(cấu hình {', '.join(available(engine))}, "
         f"độ sâu {args.depth}) -> {args.out}"
     )
 
