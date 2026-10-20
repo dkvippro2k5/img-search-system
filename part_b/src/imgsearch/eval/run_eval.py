@@ -65,9 +65,10 @@ def load_gold_queries(path: str | Path) -> list[GoldQuery]:
     ]
 
 
-def flatten(resp: SearchResponse) -> list[str]:
-    """Xen kẽ các nhóm: phần tử 1 của mỗi nhóm, rồi phần tử 2... Bỏ ảnh lặp giữa các nhóm."""
-    lists = [[h.image_id[:SHORT] for h in g.hits] for g in resp.groups]
+def flatten(resp: SearchResponse, short: int | None = SHORT) -> list[str]:
+    """Xen kẽ các nhóm: phần tử 1 của mỗi nhóm, rồi phần tử 2... Bỏ ảnh lặp giữa các nhóm.
+    `short`: cắt id còn bấy nhiêu ký tự (golden); None giữ sha256 đầy đủ."""
+    lists = [[h.image_id[:short] for h in g.hits] for g in resp.groups]
     out, seen = [], set()
     for rank in range(max((len(x) for x in lists), default=0)):
         for x in lists:
@@ -81,10 +82,10 @@ def _has_msg(resp: SearchResponse, *fragments: str) -> bool:
     return any(f.lower() in m.lower() for m in resp.messages for f in fragments)
 
 
-def judge_behavior(q: GoldQuery, resp: SearchResponse, ranked: list[str]) -> tuple[bool, str]:
+def judge_behavior(expected: str, resp: SearchResponse, ranked: list[str]) -> tuple[bool, str]:
     """Đúng/sai theo expected_behavior. Trả (đạt, lý do ngắn)."""
     hits = bool(ranked)
-    e = q.expected
+    e = expected
     if e == "results":
         return hits, "có kết quả" if hits else "không có kết quả"
     if e == "empty":
@@ -104,12 +105,15 @@ def judge_behavior(q: GoldQuery, resp: SearchResponse, ranked: list[str]) -> tup
     if e == "partial_with_notice":
         ok = hits and _has_msg(resp, "không tìm thấy")
         return ok, "có kết quả + báo vế thiếu" if ok else "thiếu kết quả hoặc thiếu thông báo"
+    if e == "no_co_occurrence":
+        ok = hits and _has_msg(resp, "không có ảnh nào có cả")
+        return ok, "báo không có ảnh chung + hiện từng người" if ok else "không báo / không hiện"
     return False, f"chưa hỗ trợ chấm '{e}'"
 
 
 def score_query(q: GoldQuery, resp: SearchResponse) -> dict:
     ranked = flatten(resp)
-    ok, why = judge_behavior(q, resp, ranked)
+    ok, why = judge_behavior(q.expected, resp, ranked)
     out = {
         "id": q.id,
         "type": q.type,

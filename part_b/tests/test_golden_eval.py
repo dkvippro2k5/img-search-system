@@ -208,7 +208,7 @@ def test_flatten_interleaves_groups_and_dedupes():
 )
 def test_judge_behavior(expected, resp, ok):
     q = GoldQuery("q", "single", "q", expected)
-    assert judge_behavior(q, resp, flatten(resp))[0] is ok
+    assert judge_behavior(q.expected, resp, flatten(resp))[0] is ok
 
 
 def test_unjudged_images_are_skipped_and_p_at_r():
