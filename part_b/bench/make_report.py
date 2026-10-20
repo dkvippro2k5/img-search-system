@@ -162,6 +162,14 @@ def mode_section(mode: str, d: Path) -> tuple[list[str], dict]:
             lines.append(f"| {st[2:]} | " + " | ".join(cells) + " |")
     cpu = [float(s["cpu"].rstrip("%")) for s in stats if s["cpu"].rstrip("%")]
     mem = [_mem_mb(s["mem"]) for s in stats]
+    errs = run.get("mentor_errors")
+    if errs is not None and run["health"].get("text_dense"):
+        lines += [
+            "",
+            f"Lời gọi mentor thất bại trong lần đo này: {errs['total']} (trong đó "
+            f"{errs['rate_limited']} lần HTTP 429 do giới hạn request); request đó chạy không "
+            "có kênh văn bản [Đã đo].",
+        ]
     if cpu:
         lines += [
             "",
@@ -206,6 +214,13 @@ def main() -> None:
         "không có cache kết quả.",
         "- Hậu tố `-cN`: `SEARCH_CONCURRENCY=N` (số truy vấn được tính toán cùng lúc, còn lại "
         "xếp hàng; 0 = không giới hạn). Không hậu tố = mặc định của docker-compose (2).",
+        "- Không hậu tố: cấu hình mặc định, **có** kênh dense văn bản qwen3 qua API mentor (trọng "
+        "số 0,5, mỗi truy vấn có phần mô tả gọi mạng một lần). `-notext`: tắt kênh này "
+        "(`TEXT_DENSE_ENABLED=false`); các biến thể `-cN` cũng đo khi chưa có kênh văn bản.",
+        "- Kênh văn bản gọi API của mentor qua đường hầm: key bị giới hạn **100 request/phút** "
+        "(header `x-litellm-key-rpm-limit`, đo 20/10), vượt thì HTTP 429 và engine bỏ kênh cho "
+        "request đó (HTTP vẫn 200). Latency kênh này phụ thuộc tải máy mentor, nên hai lần đo "
+        "liên tiếp có thể chênh nhau; dưới tải lớn, chất lượng thực tế gần với `-notext`.",
         "- Server p50/p95: thời gian trong server theo header `Server-Timing` total (gồm thời gian "
         "chờ semaphore, không gồm mạng).",
         "",

@@ -97,6 +97,13 @@ def run_mode(mode: str, extra: dict[str, str] | None = None, name: str | None = 
     log = compose("--profile", "bench", "run", "--rm", "bench", env=env, check=False)
     sampler.stop.set()
     sampler.join()
+    # Lời gọi mentor thất bại (429 do giới hạn 100 request/phút mỗi key, timeout): engine bỏ
+    # kênh văn bản cho request đó, nên số đo của kênh này phụ thuộc máy mentor.
+    api_log = compose("logs", "api", "--no-log-prefix", check=False)
+    mentor_errors = {
+        "rate_limited": api_log.count("HTTP 429"),
+        "total": api_log.count("Embedding mentor lỗi"),
+    }
     for name in ("summary.json", "raw.json"):
         if not (RESULTS / name).exists():
             raise SystemExit(f"k6 không ghi {name}:\n{log[-3000:]}")
@@ -104,7 +111,16 @@ def run_mode(mode: str, extra: dict[str, str] | None = None, name: str | None = 
     (out_dir / "k6.log").write_text(log, encoding="utf-8")
     (out_dir / "stats.json").write_text(json.dumps(sampler.samples), encoding="utf-8")
     (out_dir / "run.json").write_text(
-        json.dumps({"mode": mode, "started": t0, "health": health, "env": env}, indent=2),
+        json.dumps(
+            {
+                "mode": mode,
+                "started": t0,
+                "health": health,
+                "env": env,
+                "mentor_errors": mentor_errors,
+            },
+            indent=2,
+        ),
         encoding="utf-8",
     )
     print(f"[{mode}] xong -> {out_dir}")
