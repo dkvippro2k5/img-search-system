@@ -3,8 +3,7 @@
 Mỗi chế độ (nocache: tắt cache vector truy vấn, số chính; cache: có cache): p50/p95/p99 theo
 mức VU và theo loại truy vấn, QPS, tỷ lệ lỗi, QPS tối đa mà p95 < 3 s, thời gian xử lý trong
 server (Server-Timing), CPU/RAM của container, thời gian khởi động tới healthy. Kèm phần cứng.
-Không có cache kết quả ở API (RESULT_CACHE_ENABLED chưa được dùng): "cache" chỉ là cache vector
-truy vấn dense.
+Không có cache kết quả ở API: "cache" chỉ là cache vector truy vấn dense.
 """
 
 import json

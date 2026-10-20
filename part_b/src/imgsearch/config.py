@@ -73,7 +73,6 @@ class Settings(BaseSettings):
     max_query_chars: int = 300
     # Số truy vấn được tính toán đồng thời (api/main.py); 0 = không giới hạn.
     search_concurrency: int = 0
-    result_cache_enabled: bool = True
 
     # Truy xuất
     candidate_pool: int = 200  # số ứng viên BM25 mỗi lượt
