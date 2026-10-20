@@ -7,17 +7,43 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main>
-      <form id="search-form">
-        <input id="q" name="q" type="search" maxlength="300" autocomplete="off"
-               placeholder="Ví dụ: Đen Vâu, Trấn Thành và Hari Won, con trai Phạm Nhật Vượng" />
+    <header class="top">
+      <div class="brand">
+        <h1>Tìm ảnh người nổi tiếng Việt Nam</h1>
+        <p id="index-info" class="muted">Đang kết nối máy chủ…</p>
+      </div>
+      <form id="search-form" role="search">
+        <input id="q" name="q" type="search" maxlength="300" autocomplete="off" autofocus
+               aria-label="Truy vấn"
+               placeholder="Ví dụ: Đen Vâu hát trong concert, Trấn Thành và Hari Won, con trai Phạm Nhật Vượng" />
+        <label class="toggle"><input id="safe" type="checkbox" checked /> Lọc an toàn</label>
         <button type="submit">Tìm</button>
       </form>
-      <p id="status" role="status"></p>
+      <nav id="examples" aria-label="Truy vấn mẫu"></nav>
+    </header>
+
+    <main>
+      <section id="summary" hidden>
+        <div class="summary-row">
+          <span id="qtype" class="badge"></span>
+          <span id="total-ms" class="muted"></span>
+        </div>
+        <div id="timing" class="timing" aria-label="Thời gian xử lý từng bước"></div>
+        <nav id="group-nav" class="group-nav" aria-label="Các nhóm kết quả"></nav>
+      </section>
+      <p id="status" role="status" class="muted"></p>
       <section id="messages" aria-live="polite"></section>
       <section id="reasoning"></section>
       <section id="results"></section>
     </main>
+
+    <dialog id="viewer">
+      <form method="dialog"><button class="close" aria-label="Đóng">×</button></form>
+      <img id="viewer-img" alt="" />
+      <p id="viewer-caption"></p>
+      <p id="viewer-meta" class="muted"></p>
+    </dialog>
+
     <script type="module" src="dist/app.js"></script>
   </body>
 </html>
