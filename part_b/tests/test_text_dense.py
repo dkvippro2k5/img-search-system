@@ -188,3 +188,18 @@ def test_prefetch_sends_all_intents_at_once(fake_server):
     enc.encode_query("vế một")
     enc.prefetch(["vế một"])  # đã có trong cache: không gửi lại
     assert enc._inflight == {}
+
+
+def test_engine_prefetch_is_reused_by_search(text_index, fake_server):
+    c = MentorClient("k", f"{fake_server}/v1/embeddings", MODEL, timeout=5, cache_size=0)
+    enc = MentorTextEncoder(c, DIM, MODEL)
+    e = make_engine(text_index, encoder=enc)
+    calls = []
+    real = c.embed_query
+    c.embed_query = lambda t: calls.append(t) or real(t)
+    e.prefetch("ca sĩ biểu diễn trên sân khấu")
+    assert set(enc._inflight) == {"ca sĩ biểu diễn trên sân khấu"}
+    run(e, "ca sĩ biểu diễn trên sân khấu")
+    assert calls == ["ca sĩ biểu diễn trên sân khấu"] and enc._inflight == {}
+    e.prefetch("Mỹ Tâm")  # chỉ có tên: không gọi mentor
+    assert enc._inflight == {}

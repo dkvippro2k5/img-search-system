@@ -51,6 +51,9 @@ def search(req: SearchRequest, response: Response) -> SearchResponse:
     if _gate is None:
         result, timings = engine.search(req)
     else:
+        # Gửi embedding kênh văn bản (gọi mạng) trước khi xếp hàng: chờ mạng chồng lên chờ
+        # semaphore thay vì giữ chỗ tính toán trong lúc CPU rảnh.
+        engine.prefetch(req.query)
         with _gate:
             t_wait = time.perf_counter()
             result, timings = engine.search(req)

@@ -405,6 +405,16 @@ class SearchEngine:
         persons = self.store.persons_of([i for i, _ in hits])
         return multi_intent.diversify(hits, persons, self.settings.per_person_cap)
 
+    def prefetch(self, query: str) -> None:
+        """Gửi trước embedding kênh văn bản cho `query` (API gọi trước khi xếp hàng semaphore).
+        search() sau đó dùng lại lời gọi đang bay hoặc cache; không có kênh thì không làm gì."""
+        if self.text_dense is None:
+            return
+        try:
+            self._prefetch_text(self.parser.parse(query))
+        except Exception as e:  # noqa: BLE001 — chỉ là tối ưu, lỗi thì search() tự gọi
+            log.warning("prefetch lỗi (%s)", e)
+
     def _prefetch_text(self, parsed: ParsedQuery) -> None:
         """Gửi trước embedding kênh văn bản của mọi vế sẽ dùng tới (cùng điều kiện _retrieve:
         vế không có người, hoặc có người kèm phần mô tả)."""
