@@ -34,16 +34,16 @@ Lệnh bên dưới chạy trong `part_b/` (đường dẫn mặc định `../da
 ## 1. Chạy nhanh với dữ liệu giả (không cần dữ liệu thật)
 
 ```bash
-python -m venv .venv && . .venv/Scripts/activate      # Linux/macOS: . .venv/bin/activate
+python -m venv .venv && . .venv/Scripts/activate      # PowerShell: .venv\Scripts\Activate.ps1; Linux/macOS: . .venv/bin/activate
 cp .env.example .env                                  # INDEX_VERSION=dev
 python -m pip install -e ".[dev]"
-python -m pytest -q                                   # 288 test, không đọc ../data
+python -m pytest -q                                   # không đọc ../data; test tải ảnh cần extra index (Pillow), thiếu thì tự bỏ qua
 python scripts/build_index.py --input tests/fixtures/mini --version dev
 cd web && npm install && npm run build && cd ..
 uvicorn imgsearch.api.main:app --reload               # http://localhost:8000
 ```
 
-Không có model ONNX nên dense ảnh tự tắt, engine chạy BM25 (log ghi rõ). Các truy vấn mẫu nằm ở `tests/fixtures/mini/README.md`.
+Không có model ONNX nên dense ảnh tự tắt, engine chạy BM25 (`/healthz` trả `"dense": null`). Đã chạy thử từ bản clone sạch trên Python 3.12, cả bằng `uvicorn` lẫn `docker compose` với `INDEX_VERSION=dev` [Đã đo 21/10/2026]. Các truy vấn mẫu nằm ở `tests/fixtures/mini/README.md`.
 
 ## 2. Dựng lại toàn bộ từ dữ liệu thật
 
