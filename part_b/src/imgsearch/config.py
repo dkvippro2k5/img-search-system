@@ -15,7 +15,10 @@ class Settings(BaseSettings):
     web_dir: Path = Path("web")  # thư mục chứa index.html, style.css, dist/app.js
 
     index_version: str = "dev"
+    # true: tải index/v{INDEX_VERSION}/ từ S3/MinIO về INDEX_DIR lúc khởi động (storage/s3.py)
     index_from_s3: bool = False
+    # true (Docker): không có index thì /healthz trả 503 mãi, không chạy với index rỗng
+    require_index: bool = False
 
     s3_endpoint_url: str | None = None
     s3_bucket: str = "imgsearch"
@@ -37,6 +40,11 @@ class Settings(BaseSettings):
     # Bỏ kết quả dense có xác suất khớp SigLIP sigmoid(scale·cos + bias) thấp hơn ngưỡng này
     # (câu vô nghĩa "xyz abc": p < 0,01; truy vấn thật: top 10 p > 0,3). Không có bias: bỏ qua.
     dense_min_prob: float = 0.1
+    # Số luồng ONNX Runtime cho text encoder; 0 = mặc định (mọi lõi của máy). Trong container
+    # giới hạn CPU nên đặt bằng số CPU được cấp, tránh tranh luồng khi tải đồng thời.
+    onnx_threads: int = 0
+    # Cache LRU vector truy vấn dense; 0 = tắt (khi đo latency, PLAN 6).
+    query_cache_size: int = 1024
 
     llm_parser_enabled: bool = False
     llm_timeout_seconds: float = 1.5
@@ -46,6 +54,8 @@ class Settings(BaseSettings):
     nsfw_block_score: float = 0.8
     unsafe_flags: list[str] = ["nsfw", "sexual"]
     max_query_chars: int = 300
+    # Số truy vấn được tính toán đồng thời (api/main.py); 0 = không giới hạn.
+    search_concurrency: int = 0
     result_cache_enabled: bool = True
 
     # Truy xuất

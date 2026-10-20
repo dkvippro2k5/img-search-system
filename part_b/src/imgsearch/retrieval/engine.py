@@ -75,10 +75,11 @@ class SearchEngine:
         self._s3 = None
 
     def load(self) -> None:
-        """Nạp index/v{INDEX_VERSION}/ nếu có và dựng từ điển person.
-
-        TODO: tải từ S3 khi INDEX_FROM_S3; bắt buộc có index khi chạy Docker.
-        """
+        """Nạp index/v{INDEX_VERSION}/ (tải từ S3 trước nếu INDEX_FROM_S3) và dựng từ điển
+        person. Thiếu index: chạy với index rỗng, trừ khi REQUIRE_INDEX (khi đó không bao giờ
+        `ready`, /healthz trả 503)."""
+        if self.settings.index_from_s3:
+            self._download_index()
         meta = self.settings.index_path / "meta.sqlite"
         if meta.exists():
             self.store = MetaStore(meta)
@@ -97,8 +98,23 @@ class SearchEngine:
                 len(self.unsafe_ids),
             )
         else:
+            if self.settings.require_index:
+                log.error("Không thấy %s và REQUIRE_INDEX=true: không nhận truy vấn", meta)
+                return
             log.warning("Không thấy %s, chạy với index rỗng", meta)
         self.ready = True
+
+    def _download_index(self) -> None:
+        """Lỗi tải không chặn khởi động: dùng bản index đã có trên đĩa (nếu có)."""
+        from imgsearch.storage.s3 import download_index
+
+        t = time.perf_counter()
+        try:
+            n = download_index(self.settings)
+        except Exception as e:  # noqa: BLE001 — mạng, quyền, bucket rỗng: đều quay về bản local
+            log.error("Không tải được index từ S3 (%s); dùng bản trên đĩa nếu có", e)
+            return
+        log.info("Tải %d file index từ S3 trong %.1f s", n, time.perf_counter() - t)
 
     def _load_dense(self) -> DenseIndex | None:
         """Lỗi ở đây không chặn khởi động: log cảnh báo và chạy chỉ BM25."""
@@ -114,7 +130,9 @@ class SearchEngine:
             )
             return None
         try:
-            encoder = self._text_encoder or OnnxTextEncoder(s.models_dir / model, s.dense_onnx_file)
+            encoder = self._text_encoder or OnnxTextEncoder(
+                s.models_dir / model, s.dense_onnx_file, s.onnx_threads, s.query_cache_size
+            )
             meta = getattr(encoder, "meta", {})
             dense = DenseIndex.load(
                 path,
