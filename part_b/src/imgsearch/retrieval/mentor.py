@@ -26,7 +26,9 @@ QUERY_INSTRUCT = (
 
 
 class MentorError(RuntimeError):
-    pass
+    def __init__(self, msg: str, status: int | None = None):
+        super().__init__(msg)
+        self.status = status  # mã HTTP nếu server trả lỗi (429: vượt giới hạn request của key)
 
 
 class MentorClient:
@@ -46,6 +48,13 @@ class MentorClient:
         self.rerank_url, self.rerank_model = rerank_url, rerank_model
         self.cache_size = cache_size
         self._cache: OrderedDict[str, np.ndarray] = OrderedDict()
+        # Đếm lời gọi embedding truy vấn (không tính trúng cache) cho /metrics.
+        self.stats = {"calls": 0, "errors": 0, "rate_limited": 0}
+        self._stats_lock = threading.Lock()
+
+    def _count(self, key: str) -> None:
+        with self._stats_lock:
+            self.stats[key] += 1
 
     def _post(self, url: str, body: dict, timeout: float) -> dict:
         req = urllib.request.Request(
@@ -57,7 +66,7 @@ class MentorClient:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 return json.load(r)
         except urllib.error.HTTPError as e:
-            raise MentorError(f"HTTP {e.code}: {e.read()[:200]!r}") from e
+            raise MentorError(f"HTTP {e.code}: {e.read()[:200]!r}", e.code) from e
         except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
             raise MentorError(str(e)) from e
 
@@ -80,9 +89,11 @@ class MentorClient:
         if text in self._cache:
             self._cache.move_to_end(text)
             return self._cache[text]
+        self._count("calls")
         try:
             vec = self.embed([QUERY_INSTRUCT + text])[0]
         except MentorError as e:
+            self._count("rate_limited" if e.status == 429 else "errors")
             log.warning("Embedding mentor lỗi (%s): bỏ kênh văn bản", e)
             return None
         if self.cache_size:

@@ -128,6 +128,11 @@ class _Fake(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         assert self.headers["Authorization"] == "Bearer k"
+        if self.path == "/v1/limited":  # key vượt giới hạn request/phút
+            self.send_response(429)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if self.path == "/v1/embeddings":
             data = [
                 {"index": i, "embedding": [3.0, 4.0] + [0.0] * 6}
@@ -203,3 +208,24 @@ def test_engine_prefetch_is_reused_by_search(text_index, fake_server):
     assert calls == ["ca sĩ biểu diễn trên sân khấu"] and enc._inflight == {}
     e.prefetch("Mỹ Tâm")  # chỉ có tên: không gọi mentor
     assert enc._inflight == {}
+
+
+def test_mentor_client_counts_calls_errors_and_rate_limits(fake_server):
+    ok = MentorClient("k", f"{fake_server}/v1/embeddings", MODEL, timeout=5)
+    ok.embed_query("a")
+    ok.embed_query("a")  # trúng cache: không tính lời gọi
+    assert ok.stats == {"calls": 1, "errors": 0, "rate_limited": 0}
+    limited = MentorClient("k", f"{fake_server}/v1/limited", MODEL, timeout=5)
+    assert limited.embed_query("a") is None
+    assert limited.stats == {"calls": 1, "errors": 0, "rate_limited": 1}
+    down = MentorClient("k", "http://127.0.0.1:9/v1/embeddings", MODEL, timeout=0.5)
+    down.embed_query("a")
+    assert down.stats == {"calls": 1, "errors": 1, "rate_limited": 0}
+
+
+def test_engine_mentor_stats(text_index, fake_server):
+    c = MentorClient("k", f"{fake_server}/v1/embeddings", MODEL, timeout=5)
+    e = make_engine(text_index, encoder=MentorTextEncoder(c, DIM, MODEL))
+    run(e, "ca sĩ biểu diễn trên sân khấu")
+    assert e.mentor_stats()["calls"] == 1
+    assert make_engine(text_index).mentor_stats() is None  # encoder giả không có client

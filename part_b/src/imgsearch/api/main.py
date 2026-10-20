@@ -11,6 +11,7 @@ from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from imgsearch.api.metrics import Metrics
 from imgsearch.api.schemas import SearchRequest, SearchResponse
 from imgsearch.config import get_settings
 from imgsearch.retrieval.engine import SearchEngine
@@ -21,6 +22,7 @@ state: dict[str, SearchEngine | None] = {"engine": None}
 # giảm khi tăng tải (reports/perf.md).
 _n = get_settings().search_concurrency
 _gate = threading.BoundedSemaphore(_n) if _n > 0 else None
+metrics_store = Metrics()
 
 
 @asynccontextmanager
@@ -48,17 +50,22 @@ def healthz() -> JSONResponse:
 def search(req: SearchRequest, response: Response) -> SearchResponse:
     engine = state["engine"]
     t0 = time.perf_counter()
-    if _gate is None:
-        result, timings = engine.search(req)
-    else:
-        # Gửi embedding kênh văn bản (gọi mạng) trước khi xếp hàng: chờ mạng chồng lên chờ
-        # semaphore thay vì giữ chỗ tính toán trong lúc CPU rảnh.
-        engine.prefetch(req.query)
-        with _gate:
-            t_wait = time.perf_counter()
+    try:
+        if _gate is None:
             result, timings = engine.search(req)
-        timings = {"queue": (t_wait - t0) * 1000, **timings}
+        else:
+            # Gửi embedding kênh văn bản (gọi mạng) trước khi xếp hàng: chờ mạng chồng lên chờ
+            # semaphore thay vì giữ chỗ tính toán trong lúc CPU rảnh.
+            engine.prefetch(req.query)
+            with _gate:
+                t_wait = time.perf_counter()
+                result, timings = engine.search(req)
+            timings = {"queue": (t_wait - t0) * 1000, **timings}
+    except Exception:
+        metrics_store.observe_error()
+        raise
     timings["total"] = (time.perf_counter() - t0) * 1000
+    metrics_store.observe(result, timings)
     response.headers["Server-Timing"] = ", ".join(
         f"{name};dur={ms:.1f}" for name, ms in timings.items()
     )
@@ -67,8 +74,13 @@ def search(req: SearchRequest, response: Response) -> SearchResponse:
 
 @app.get("/metrics")
 def metrics() -> dict:
-    # TODO: đếm request, truy vấn rỗng, tỷ lệ gọi LLM, histogram latency.
-    return {}
+    """Số đo từ lúc khởi động: request, truy vấn rỗng, latency, lỗi/429 của mentor."""
+    engine = state["engine"]
+    return {
+        **metrics_store.snapshot(),
+        "mentor": engine.mentor_stats() if engine else None,
+        "index": engine.info() if engine else None,
+    }
 
 
 _web_dir = get_settings().web_dir

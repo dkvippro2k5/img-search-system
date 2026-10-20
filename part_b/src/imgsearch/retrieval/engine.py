@@ -211,6 +211,11 @@ class SearchEngine:
             "text_dense": self.text_dense.encoder.name if self.text_dense else None,
         }
 
+    def mentor_stats(self) -> dict | None:
+        """Bộ đếm lời gọi mentor của kênh văn bản (cho /metrics); None khi kênh tắt."""
+        client = getattr(self.text_dense and self.text_dense.encoder, "client", None)
+        return dict(client.stats) if client is not None else None
+
     # --- điểm vào ---
 
     def search(self, req: SearchRequest) -> tuple[SearchResponse, dict[str, float]]:

@@ -53,3 +53,19 @@ def test_search_relation_has_reasoning(client):
     body = client.post("/search", json={"query": "vợ của Trấn Thành"}).json()
     assert body["reasoning"][0]["evidence"]
     assert body["groups"][0]["kind"] == "relation_target"
+
+
+def test_metrics_counts_requests_empty_and_latency(client):
+    before = client.get("/metrics").json()
+    client.post("/search", json={"query": "Đen Vâu"})
+    client.post("/search", json={"query": "con của Mỹ Tâm"})  # H3: không bằng chứng, không ảnh
+    client.post("/search", json={"query": ""})  # 422: không tính là request đã xử lý
+    m = client.get("/metrics").json()
+    req, lat = m["requests"], m["latency_ms"]
+    assert req["total"] - before["requests"]["total"] == 2
+    assert req["empty"] - before["requests"]["empty"] == 1
+    assert req["with_messages"] - before["requests"]["with_messages"] >= 1
+    assert sum(lat["histogram"].values()) == req["total"]
+    assert lat["p50"] is not None and lat["p95"] >= lat["p50"]
+    assert {"parse", "total"} <= set(lat["step_avg"])
+    assert m["index"]["n_images"] == 27 and m["mentor"] is None  # index mini: kênh văn bản tắt
