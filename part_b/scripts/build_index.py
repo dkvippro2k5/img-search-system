@@ -19,9 +19,15 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--input", type=Path, default=settings.data_dir / "merged")
     ap.add_argument("--out", type=Path, default=settings.index_dir)
     ap.add_argument("--version", default=settings.index_version)
+    ap.add_argument(
+        "--features",
+        type=Path,
+        default=settings.data_dir / "features",
+        help="thư mục có image_embeddings.npy/.ids.txt/.json (không có thì bỏ qua dense)",
+    )
     args = ap.parse_args(argv)
 
-    manifest = build_index(args.input, args.out, args.version)
+    manifest = build_index(args.input, args.out, args.version, args.features)
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
 

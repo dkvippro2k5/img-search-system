@@ -39,14 +39,14 @@ def _caption(row: dict) -> str | None:
     return text or None
 
 
-def _images(rows: list[dict]) -> list[ImageRec]:
+def _images(rows: list[dict], with_caption: bool = True) -> list[ImageRec]:
     return [
         ImageRec(
             image_id=r["sha256"],
             image_url=r.get("image_url"),
             width=r.get("width"),
             height=r.get("height"),
-            caption=_caption(r),
+            caption=_caption(r) if with_caption else None,
             description=r.get("source_title"),
             source_url=r.get("source_url"),
             status=r.get("review_status") or "approved",
@@ -55,11 +55,14 @@ def _images(rows: list[dict]) -> list[ImageRec]:
     ]
 
 
-def to_dataset(golden_dir: str | Path, mode: str = "auto") -> tuple[Dataset, dict]:
+def to_dataset(
+    golden_dir: str | Path, mode: str = "auto", with_caption: bool = True
+) -> tuple[Dataset, dict]:
+    """with_caption=False: bỏ caption VLM, mô phỏng dữ liệu thật hiện tại (CSV không có caption)."""
     if mode not in MODES:
         raise ValueError(f"mode phải là một trong {MODES}")
     rows = load_metadata(golden_dir)
-    ds = Dataset(images=_images(rows))
+    ds = Dataset(images=_images(rows, with_caption))
     gold_dir = Path(golden_dir) / "gold"
     report = _auto(rows, ds) if mode == "auto" else _oracle(rows, ds, gold_dir)
     report.update(mode=mode, images=len(ds.images), persons=len(ds.persons))

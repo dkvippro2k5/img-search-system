@@ -1,5 +1,5 @@
-"""Dựng thư mục index: meta.sqlite (metadata, image_person, quan hệ có bằng chứng)
-và lexical.npz (BM25, xem retrieval/bm25.py).
+"""Dựng thư mục index: meta.sqlite (metadata, image_person, quan hệ có bằng chứng),
+lexical.npz (BM25, xem retrieval/bm25.py) và dense.npz nếu có embedding ảnh (retrieval/dense.py).
 
 Quy tắc lọc (đếm từng lý do vào stats để ghi manifest):
 - ảnh: chỉ status == "approved" và không có dup_of;
@@ -16,8 +16,11 @@ from datetime import UTC, datetime
 from importlib import resources
 from pathlib import Path
 
+import numpy as np
+
 from imgsearch.data.dataset import Dataset, read_jsonl_dir
 from imgsearch.retrieval.bm25 import BM25Index, doc_terms
+from imgsearch.retrieval.dense import align_vectors
 
 
 def _schema_sql() -> str:
@@ -199,17 +202,60 @@ def _file_info(path: Path) -> dict:
     return {"bytes": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
-def build_index(input_dir: str | Path, out_dir: str | Path, version: str) -> dict:
-    """Dựng thư mục index/v{version}/ từ thư mục JSONL; trả manifest (đồng thời ghi ra file).
+def load_embeddings(features_dir: str | Path) -> tuple[np.ndarray, list[str], dict] | None:
+    """Đọc {features_dir}/image_embeddings.npy + .ids.txt (mỗi dòng một image_id, cùng thứ tự)
+    + .json (tên model). Không có thì None. Định dạng ở part_a/README.md."""
+    base = Path(features_dir) / "image_embeddings"
+    npy, ids, info = (base.with_suffix(s) for s in (".npy", ".ids.txt", ".json"))
+    if not (npy.exists() and ids.exists() and info.exists()):
+        return None
+    emb = np.load(npy, allow_pickle=False)
+    emb_ids = ids.read_text(encoding="utf-8").split()
+    if len(emb_ids) != len(emb):
+        raise ValueError(f"{npy.name} có {len(emb)} hàng, {ids.name} có {len(emb_ids)} id")
+    return emb, emb_ids, json.loads(info.read_text(encoding="utf-8"))
 
-    TODO (bước dense): thêm text.faiss vào cùng thư mục và manifest.
-    """
+
+def build_dense(meta_path: str | Path, features_dir: str | Path, out_path: str | Path) -> dict:
+    """dense.npz theo vec_row; trả thông tin cho manifest ({} nếu không có embedding)."""
+    loaded = load_embeddings(features_dir)
+    if loaded is None:
+        return {}
+    emb, emb_ids, info = loaded
+    conn = sqlite3.connect(meta_path)
+    try:
+        by_row = [r[0] for r in conn.execute("SELECT image_id FROM image ORDER BY vec_row")]
+    finally:
+        conn.close()
+    vecs, has = align_vectors(by_row, emb, emb_ids)
+    if not has.any():  # embedding của bộ dữ liệu khác (vd. golden đọc nhầm features thật)
+        return {"skipped": "không ảnh nào trong index có embedding", "model": info["model"]}
+    np.savez(out_path, vecs=vecs, has_vec=has)
+    return {
+        "model": info["model"],
+        "dim": int(emb.shape[1]),
+        "images_with_vector": int(has.sum()),
+        "coverage": round(float(has.mean()), 4) if len(has) else 0.0,
+    }
+
+
+def build_index(
+    input_dir: str | Path,
+    out_dir: str | Path,
+    version: str,
+    features_dir: str | Path | None = None,
+) -> dict:
+    """Dựng thư mục index/v{version}/ từ thư mục JSONL; trả manifest (đồng thời ghi ra file).
+    `features_dir` có image_embeddings.* thì dựng thêm dense.npz."""
     t0 = time.perf_counter()
     target = Path(out_dir) / f"v{version}"
     meta_path = target / "meta.sqlite"
     lexical_path = target / "lexical.npz"
+    dense_path = target / "dense.npz"
     stats = build_meta(read_jsonl_dir(input_dir), meta_path)
     build_lexical(meta_path, lexical_path)
+    dense_path.unlink(missing_ok=True)
+    dense = build_dense(meta_path, features_dir, dense_path) if features_dir else {}
 
     manifest = {
         "version": version,
@@ -217,7 +263,10 @@ def build_index(input_dir: str | Path, out_dir: str | Path, version: str) -> dic
         "input_dir": str(Path(input_dir).resolve()),
         "build_seconds": round(time.perf_counter() - t0, 3),
         "stats": stats,
-        "files": {p.name: _file_info(p) for p in (meta_path, lexical_path)},
+        "dense": dense,
+        "files": {
+            p.name: _file_info(p) for p in (meta_path, lexical_path, dense_path) if p.exists()
+        },
     }
     (target / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
