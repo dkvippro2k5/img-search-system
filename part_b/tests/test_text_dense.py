@@ -97,7 +97,7 @@ def test_name_only_query_does_not_call_mentor(text_index):
 
 
 def test_text_channel_disabled_on_model_mismatch_or_flag(text_index):
-    assert SearchEngine(Settings(_env_file=None)).settings.text_dense_enabled is False  # mặc định
+    assert SearchEngine(Settings(_env_file=None)).settings.text_dense_weight == 0.5  # mặc định
     assert make_engine(text_index, text_embed_model="khac").text_dense is None
     assert make_engine(text_index, text_dense_enabled=False).text_dense is None
     # không encoder giả, không key -> tắt, không lỗi

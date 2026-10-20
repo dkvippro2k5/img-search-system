@@ -55,10 +55,11 @@ class Settings(BaseSettings):
     rerank_model: str = "jina-reranker-v2"
     mentor_timeout_seconds: float = 1.0
     # Kênh dense văn bản (qwen3 trên văn bản BM25 của ảnh, scripts/encode_texts.py ->
-    # text_dense.npz). Tắt mặc định: dev thật chỉ +0,02 nDCG ở trọng số 0,5 (1 và 2 làm giảm;
-    # golden thì 2 tốt nhất), đổi lại phụ thuộc mạng mentor + latency. Bật cần file + key.
-    # DIM: cắt Matryoshka lúc nạp (server không nhận `dimensions`); 1024 float32 ≈ 368 MB / 90k.
-    text_dense_enabled: bool = False
+    # text_dense.npz). Bật khi index có file và có key mentor; thiếu thì tự tắt. Trọng số 0,5:
+    # dev thật +0,02 nDCG (1 và 2 làm giảm; golden thì 2 tốt nhất), đổi lại phụ thuộc mạng
+    # mentor + latency (p95 engine 45 -> 278 ms). DIM: cắt Matryoshka lúc nạp (server không nhận
+    # `dimensions`); 1024 float32 ≈ 368 MB / 90k ảnh.
+    text_dense_enabled: bool = True
     text_dense_weight: float = 0.5
     text_dense_dim: int = 1024
 
