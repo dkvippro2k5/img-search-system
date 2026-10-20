@@ -3,16 +3,20 @@
 Luồng xử lý: PLAN.md 4.4. Hành vi theo từng kịch bản được kiểm ở tests/test_engine_search.py
 (tên test theo mã SCENARIOS.md). Mỗi bước ghi thời gian vào `timings` (ms) cho Server-Timing.
 
-Truy xuất một ý định (`_retrieve`): BM25 + dense (vector ảnh, nếu index có dense.npz) gộp
-bằng fusion.rrf có trọng số `dense_weight`. Dense nhận phần mô tả đã bỏ tên người ("Hari Won
-mặc váy cưới" -> "mặc váy cưới"): model ảnh không biết mặt người nổi tiếng, danh tính đến từ
-lọc person.
+Truy xuất một ý định (`_retrieve`): BM25 + dense ảnh (nếu index có dense.npz) + dense văn bản
+(nếu có text_dense.npz và cấu hình mentor) gộp bằng fusion.rrf có trọng số `dense_weight`,
+`text_dense_weight`. Dense ảnh nhận phần mô tả đã bỏ tên người ("Hari Won mặc váy cưới" ->
+"mặc váy cưới"): model ảnh không biết mặt người nổi tiếng, danh tính đến từ lọc person. Dense văn
+bản nhận cả câu (tiêu đề có nhắc tên), gọi mentor song song với hai kênh kia, lỗi thì bỏ kênh.
 """
 
 import json
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+
+import numpy as np
 
 from imgsearch.api.schemas import EvidenceStep, ImageHit, ResultGroup, SearchRequest, SearchResponse
 from imgsearch.config import Settings
@@ -22,6 +26,7 @@ from imgsearch.retrieval.aliases import AliasIndex
 from imgsearch.retrieval.dense import DenseIndex, OnnxTextEncoder, TextEncoder, min_cosine
 from imgsearch.retrieval.fusion import rrf
 from imgsearch.retrieval.lexical import LexicalIndex
+from imgsearch.retrieval.mentor import MentorClient, MentorTextEncoder
 from imgsearch.retrieval.query_parser import (
     Intent,
     ParsedQuery,
@@ -61,15 +66,24 @@ class _Draft:
 
 
 class SearchEngine:
-    def __init__(self, settings: Settings, text_encoder: TextEncoder | None = None):
-        """`text_encoder`: thay encoder ONNX (test dùng encoder giả, không cần file model)."""
+    def __init__(
+        self,
+        settings: Settings,
+        text_encoder: TextEncoder | None = None,
+        query_text_encoder: TextEncoder | None = None,
+    ):
+        """`text_encoder`: thay encoder ONNX của kênh ảnh; `query_text_encoder`: thay encoder
+        mentor của kênh văn bản (test dùng encoder giả, không cần model hay mạng)."""
         self.settings = settings
         self._text_encoder = text_encoder
+        self._query_text_encoder = query_text_encoder
         self.ready = False
         self.n_images = 0
         self.store: MetaStore | None = None
         self.lexical: LexicalIndex | None = None
         self.dense: DenseIndex | None = None
+        self.text_dense: DenseIndex | None = None
+        self._pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="text-dense")
         self.parser = QueryParser(AliasIndex([]))
         self.unsafe_ids: set[str] = set()
         self._s3 = None
@@ -90,6 +104,7 @@ class SearchEngine:
                 self.settings.nsfw_block_score, self.settings.unsafe_flags
             )
             self.dense = self._load_dense()
+            self.text_dense = self._load_text_dense()
             log.info(
                 "Đã nạp %s: %d ảnh, %d person, %d ảnh bị lọc an toàn",
                 meta,
@@ -147,6 +162,45 @@ class SearchEngine:
         log.info("Dense %s: %.1f%% ảnh có vector", model, 100 * dense.coverage)
         return dense
 
+    def _load_text_dense(self) -> DenseIndex | None:
+        """Kênh văn bản (P3): text_dense.npz + dịch vụ embedding của mentor. Thiếu file, thiếu
+        cấu hình hoặc model khác manifest thì tắt kênh (log), không chặn khởi động."""
+        s = self.settings
+        path = s.index_path / "text_dense.npz"
+        if not s.text_dense_enabled or not path.exists():
+            return None
+        manifest = json.loads((s.index_path / "manifest.json").read_text(encoding="utf-8"))
+        model = manifest.get("text_dense", {}).get("model")
+        if model != s.text_embed_model:
+            log.warning("text_dense.npz là %s, TEXT_EMBED_MODEL=%s: tắt", model, s.text_embed_model)
+            return None
+        encoder = self._query_text_encoder
+        if encoder is None:
+            if not (s.mentor_api_key and s.text_embed_url):
+                log.warning("Có text_dense.npz nhưng thiếu MENTOR_API_KEY/TEXT_EMBED_URL: tắt")
+                return None
+            client = MentorClient(
+                s.mentor_api_key,
+                s.text_embed_url,
+                s.text_embed_model,
+                timeout=s.mentor_timeout_seconds,
+                cache_size=s.query_cache_size,
+            )
+            encoder = MentorTextEncoder(client, s.text_dense_dim, model)
+        with np.load(path, allow_pickle=False) as z:
+            vecs, has = z["vecs"][:, : encoder.dim].astype(np.float32), z["has_vec"]
+        vecs /= np.maximum(np.linalg.norm(vecs, axis=1, keepdims=True), 1e-12)
+        try:
+            dense = DenseIndex(
+                vecs, has, self.lexical.image_ids, encoder, self.lexical.allowed_rows
+            )
+        except ValueError as e:
+            log.warning("Không nạp được text_dense (%s): tắt kênh văn bản", e)
+            return None
+        pct = 100 * dense.coverage
+        log.info("Dense văn bản %s (%d chiều): %.1f%% ảnh", model, encoder.dim, pct)
+        return dense
+
     def info(self) -> dict:
         return {
             "index_version": self.settings.index_version,
@@ -154,6 +208,7 @@ class SearchEngine:
             "n_images": self.n_images,
             "n_persons": len(self.parser.aliases),
             "dense": self.dense.encoder.name if self.dense else None,
+            "text_dense": self.text_dense.encoder.name if self.text_dense else None,
         }
 
     # --- điểm vào ---
@@ -166,6 +221,7 @@ class SearchEngine:
         timings["parse"] = (time.perf_counter() - t) * 1000
 
         t = time.perf_counter()
+        self._prefetch_text(parsed)
         draft = _Draft()
         if self.store is None:
             draft.messages.append(MSG_NO_INDEX)
@@ -326,29 +382,66 @@ class SearchEngine:
         """
         pool = self.settings.candidate_pool
         if person_ids:
-            hits = self.lexical.search(text, limit=pool, person_ids=person_ids)
             desc = _residual(text, mentions or [])
+            # Kênh văn bản chỉ khi có phần mô tả (như kênh ảnh); gọi mạng song song với BM25.
+            text_job = self._text_job(text, pool, person_ids=person_ids) if desc else None
+            hits = self.lexical.search(text, limit=pool, person_ids=person_ids)
+            img = []
             if desc and self.dense:
-                hits = self._fuse(hits, self.dense.search(desc, pool, person_ids=person_ids))
+                img = self.dense.search(desc, pool, person_ids=person_ids)
+            hits = self._fuse(hits, img, self._text_result(text_job))
             seen = {i for i, _ in hits}
             return hits + [(i, 0.0) for i in self.store.images_of(person_ids) if i not in seen]
 
+        text_job = self._text_job(text, pool, categories=categories)
         hits = self.lexical.search(text, limit=pool, categories=categories) if categories else []
         if not hits:
             hits = self.lexical.search(text, limit=pool)
+        img = []
         if self.dense:
-            dense = self.dense.search(text, pool, categories=categories) if categories else []
-            hits = self._fuse(hits, dense or self.dense.search(text, pool))
+            img = self.dense.search(text, pool, categories=categories) if categories else []
+            img = img or self.dense.search(text, pool)
+        hits = self._fuse(hits, img, self._text_result(text_job))
         persons = self.store.persons_of([i for i, _ in hits])
         return multi_intent.diversify(hits, persons, self.settings.per_person_cap)
 
-    def _fuse(self, lexical: Ranked, dense: Ranked) -> Ranked:
-        if not dense:
-            return lexical
-        fused = rrf(
-            [[i for i, _ in lexical], [i for i, _ in dense]],
-            weights=[1.0, self.settings.dense_weight],
+    def _prefetch_text(self, parsed: ParsedQuery) -> None:
+        """Gửi trước embedding kênh văn bản của mọi vế sẽ dùng tới (cùng điều kiện _retrieve:
+        vế không có người, hoặc có người kèm phần mô tả)."""
+        prefetch = getattr(self.text_dense and self.text_dense.encoder, "prefetch", None)
+        if prefetch is None or parsed.type == QueryType.MULTI_HOP:
+            return
+        prefetch(
+            [
+                i.text
+                for i in parsed.intents
+                if i.text.strip() and (not i.person_ids or _residual(i.text, i.mentions))
+            ]
         )
+
+    def _text_job(self, text: str, pool: int, **filters):
+        if self.text_dense is None or not text.strip():
+            return None
+        return self._pool.submit(self.text_dense.search, text, pool, **filters)
+
+    def _text_result(self, job) -> Ranked:
+        """Kết quả kênh văn bản; lỗi bất kỳ (mạng đã có timeout trong client) -> bỏ kênh."""
+        if job is None:
+            return []
+        try:
+            return job.result(timeout=self.settings.mentor_timeout_seconds + 0.5)
+        except Exception as e:  # noqa: BLE001 — kênh phụ, không được làm hỏng truy vấn
+            log.warning("Kênh văn bản lỗi (%s): bỏ qua", e)
+            return []
+
+    def _fuse(self, lexical: Ranked, dense: Ranked, text: Ranked | None = None) -> Ranked:
+        """RRF có trọng số: BM25 (1), ảnh (`dense_weight`), văn bản (`text_dense_weight`)."""
+        lists = [(lexical, 1.0), (dense, self.settings.dense_weight)]
+        lists.append((text or [], self.settings.text_dense_weight))
+        lists = [(r, w) for r, w in lists if r]
+        if len(lists) <= 1:
+            return lists[0][0] if lists else lexical
+        fused = rrf([[i for i, _ in r] for r, _ in lists], weights=[w for _, w in lists])
         return fused[: self.settings.candidate_pool]
 
     def _co_occurrence_group(self, raw: str, intents: list[Intent]) -> _Group | None:

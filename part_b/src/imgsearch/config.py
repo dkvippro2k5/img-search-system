@@ -46,6 +46,22 @@ class Settings(BaseSettings):
     # Cache LRU vector truy vấn dense; 0 = tắt (khi đo latency, PLAN 6).
     query_cache_size: int = 1024
 
+    # Dịch vụ của mentor (retrieval/mentor.py): đường hầm tạm thời, mỗi lời gọi có timeout,
+    # lỗi thì bỏ kênh. Key chỉ đặt trong .env.
+    mentor_api_key: str | None = None
+    text_embed_url: str | None = None
+    text_embed_model: str = "qwen3-embedding-4b"
+    rerank_url: str | None = None
+    rerank_model: str = "jina-reranker-v2"
+    mentor_timeout_seconds: float = 1.0
+    # Kênh dense văn bản (qwen3 trên văn bản BM25 của ảnh, scripts/encode_texts.py ->
+    # text_dense.npz). Tắt mặc định: dev thật chỉ +0,02 nDCG ở trọng số 0,5 (1 và 2 làm giảm;
+    # golden thì 2 tốt nhất), đổi lại phụ thuộc mạng mentor + latency. Bật cần file + key.
+    # DIM: cắt Matryoshka lúc nạp (server không nhận `dimensions`); 1024 float32 ≈ 368 MB / 90k.
+    text_dense_enabled: bool = False
+    text_dense_weight: float = 0.5
+    text_dense_dim: int = 1024
+
     llm_parser_enabled: bool = False
     llm_timeout_seconds: float = 1.5
 

@@ -159,6 +159,8 @@ class DenseIndex:
             return []
         encode = getattr(self.encoder, "encode_query", None)
         q = encode(text) if encode else self.encoder.encode([text])[0]
+        if q is None:  # encoder qua mạng lỗi/timeout (kênh văn bản của mentor): bỏ kênh
+            return []
         sims = (self.vecs @ q.astype(np.float32))[rows]
         # Ngưỡng là CỔNG, không cắt từng ảnh: ảnh khớp nhất vẫn dưới ngưỡng thì truy vấn không có
         # nghĩa với model ("xyz abc") -> bỏ cả kênh. Cắt từng ảnh làm danh sách ngắn, RRF chỉ còn
