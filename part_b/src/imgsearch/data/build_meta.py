@@ -202,10 +202,13 @@ def _file_info(path: Path) -> dict:
     return {"bytes": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
-def load_embeddings(features_dir: str | Path) -> tuple[np.ndarray, list[str], dict] | None:
-    """Đọc {features_dir}/image_embeddings.npy + .ids.txt (mỗi dòng một image_id, cùng thứ tự)
-    + .json (tên model). Không có thì None. Định dạng ở part_a/README.md."""
-    base = Path(features_dir) / "image_embeddings"
+def load_embeddings(
+    features_dir: str | Path, name: str = "image_embeddings"
+) -> tuple[np.ndarray, list[str], dict] | None:
+    """Đọc {features_dir}/{name}.npy + .ids.txt (mỗi dòng một image_id, cùng thứ tự) + .json
+    (tên model). Không có thì None. Định dạng ở part_a/README.md; text_embeddings do
+    scripts/encode_texts.py sinh (kênh văn bản, P3)."""
+    base = Path(features_dir) / name
     npy, ids, info = (base.with_suffix(s) for s in (".npy", ".ids.txt", ".json"))
     if not (npy.exists() and ids.exists() and info.exists()):
         return None
@@ -216,9 +219,15 @@ def load_embeddings(features_dir: str | Path) -> tuple[np.ndarray, list[str], di
     return emb, emb_ids, json.loads(info.read_text(encoding="utf-8"))
 
 
-def build_dense(meta_path: str | Path, features_dir: str | Path, out_path: str | Path) -> dict:
-    """dense.npz theo vec_row; trả thông tin cho manifest ({} nếu không có embedding)."""
-    loaded = load_embeddings(features_dir)
+def build_dense(
+    meta_path: str | Path,
+    features_dir: str | Path,
+    out_path: str | Path,
+    name: str = "image_embeddings",
+) -> dict:
+    """dense.npz (ảnh) / text_dense.npz (văn bản) theo vec_row; trả thông tin cho manifest ({}
+    nếu không có embedding)."""
+    loaded = load_embeddings(features_dir, name)
     if loaded is None:
         return {}
     emb, emb_ids, info = loaded
@@ -239,6 +248,21 @@ def build_dense(meta_path: str | Path, features_dir: str | Path, out_path: str |
     }
 
 
+def add_text_dense(index_path: str | Path, features_dir: str | Path) -> dict:
+    """Gắn text_dense.npz vào index đã dựng (không dựng lại meta/BM25) và cập nhật manifest."""
+    target = Path(index_path)
+    out = target / "text_dense.npz"
+    info = build_dense(target / "meta.sqlite", features_dir, out, "text_embeddings")
+    manifest_path = target / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["text_dense"] = info
+    if out.exists():
+        manifest.setdefault("files", {})[out.name] = _file_info(out)
+    text = json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+    manifest_path.write_text(text, encoding="utf-8")
+    return info
+
+
 def build_index(
     input_dir: str | Path,
     out_dir: str | Path,
@@ -254,8 +278,13 @@ def build_index(
     dense_path = target / "dense.npz"
     stats = build_meta(read_jsonl_dir(input_dir), meta_path)
     build_lexical(meta_path, lexical_path)
+    text_path = target / "text_dense.npz"
     dense_path.unlink(missing_ok=True)
+    text_path.unlink(missing_ok=True)
     dense = build_dense(meta_path, features_dir, dense_path) if features_dir else {}
+    text_dense = (
+        build_dense(meta_path, features_dir, text_path, "text_embeddings") if features_dir else {}
+    )
 
     manifest = {
         "version": version,
@@ -264,8 +293,11 @@ def build_index(
         "build_seconds": round(time.perf_counter() - t0, 3),
         "stats": stats,
         "dense": dense,
+        "text_dense": text_dense,
         "files": {
-            p.name: _file_info(p) for p in (meta_path, lexical_path, dense_path) if p.exists()
+            p.name: _file_info(p)
+            for p in (meta_path, lexical_path, dense_path, text_path)
+            if p.exists()
         },
     }
     (target / "manifest.json").write_text(
