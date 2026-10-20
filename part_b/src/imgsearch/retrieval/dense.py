@@ -48,7 +48,13 @@ class TextEncoder(Protocol):
 class OnnxTextEncoder:
     """Text encoder ONNX. encoder.json: context_length, pad_id, eos_id, dim."""
 
-    def __init__(self, model_dir: str | Path, onnx_file: str = "text.onnx", threads: int = 0):
+    def __init__(
+        self,
+        model_dir: str | Path,
+        onnx_file: str = "text.onnx",
+        threads: int = 0,
+        cache_size: int = QUERY_CACHE_SIZE,
+    ):
         import onnxruntime as ort
         from tokenizers import Tokenizer
 
@@ -65,6 +71,7 @@ class OnnxTextEncoder:
             str(model_dir / onnx_file), opts, providers=["CPUExecutionProvider"]
         )
         self._cache: OrderedDict[str, np.ndarray] = OrderedDict()
+        self.cache_size = cache_size  # 0: tắt cache (đo latency, PLAN 6)
 
     def token_ids(self, texts: list[str]) -> np.ndarray:
         eos, pad = self.meta.get("eos_id"), self.meta["pad_id"]
@@ -84,12 +91,14 @@ class OnnxTextEncoder:
 
     def encode_query(self, text: str) -> np.ndarray:
         """Có cache LRU: cùng truy vấn (nhiều vế, nhiều người trùng tên) chỉ mã hóa một lần."""
+        if not self.cache_size:
+            return self.encode([text])[0]
         if text in self._cache:
             self._cache.move_to_end(text)
             return self._cache[text]
         vec = self.encode([text])[0]
         self._cache[text] = vec
-        if len(self._cache) > QUERY_CACHE_SIZE:
+        if len(self._cache) > self.cache_size:
             self._cache.popitem(last=False)
         return vec
 

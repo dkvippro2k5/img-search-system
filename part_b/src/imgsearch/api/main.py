@@ -3,6 +3,7 @@
 Latency truy xuất được báo qua header Server-Timing theo từng bước (PLAN.md 4.6).
 """
 
+import threading
 import time
 from contextlib import asynccontextmanager
 
@@ -15,6 +16,11 @@ from imgsearch.config import get_settings
 from imgsearch.retrieval.engine import SearchEngine
 
 state: dict[str, SearchEngine | None] = {"engine": None}
+# Giới hạn số truy vấn tính toán cùng lúc (SEARCH_CONCURRENCY); request còn lại xếp hàng.
+# Không giới hạn thì N request x (ONNX + numpy nhiều luồng) tranh nhau vài CPU, thông lượng
+# giảm khi tăng tải (reports/perf.md).
+_n = get_settings().search_concurrency
+_gate = threading.BoundedSemaphore(_n) if _n > 0 else None
 
 
 @asynccontextmanager
@@ -42,7 +48,13 @@ def healthz() -> JSONResponse:
 def search(req: SearchRequest, response: Response) -> SearchResponse:
     engine = state["engine"]
     t0 = time.perf_counter()
-    result, timings = engine.search(req)
+    if _gate is None:
+        result, timings = engine.search(req)
+    else:
+        with _gate:
+            t_wait = time.perf_counter()
+            result, timings = engine.search(req)
+        timings = {"queue": (t_wait - t0) * 1000, **timings}
     timings["total"] = (time.perf_counter() - t0) * 1000
     response.headers["Server-Timing"] = ", ".join(
         f"{name};dur={ms:.1f}" for name, ms in timings.items()
