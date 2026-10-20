@@ -6,7 +6,15 @@ import json
 
 import pytest
 
-from imgsearch.data.fetch import ascii_url, fetch_all, fetch_one, read_log, select_targets
+from imgsearch.data.fetch import (
+    ascii_url,
+    fetch_all,
+    fetch_one,
+    image_files,
+    read_log,
+    select_all_targets,
+    select_targets,
+)
 
 PIL = pytest.importorskip("PIL.Image")
 
@@ -54,6 +62,16 @@ def test_select_targets_skips_known_and_duplicate_urls():
         {"image_url": "", "sha256": ""},
     ]
     assert select_targets(rows) == [("b", "page")]
+
+
+def test_select_all_targets_dedupes_urls():
+    rows = [
+        {"image_url": "a", "sha256": "s1", "source_url": "p"},
+        {"image_url": "a", "sha256": ""},
+        {"image_url": "b", "sha256": "s2"},
+        {"image_url": "", "sha256": "s3"},
+    ]
+    assert select_all_targets(rows) == [("a", "p"), ("b", None)]
 
 
 def test_fetch_ok_saves_by_content_hash(tmp_path):
@@ -109,3 +127,13 @@ def test_relative_url_is_final_failure(tmp_path):
 
 def test_ascii_url_keeps_reserved_chars():
     assert ascii_url("https://a.vn/x?q=1&b=%20") == "https://a.vn/x?q=1&b=%20"
+
+
+def test_image_files_maps_ids_to_downloaded_files():
+    images = [
+        {"image_id": "s1", "image_url": "u1"},
+        {"image_id": "s2", "image_url": "u2"},
+        {"image_id": "s3", "image_url": None},
+    ]
+    log = {"u1": {"status": "ok", "path": "p1"}, "u2": {"status": "http_404", "path": None}}
+    assert image_files(images, log) == [("s1", "p1")]

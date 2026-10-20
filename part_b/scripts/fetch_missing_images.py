@@ -1,6 +1,7 @@
-"""Tải ảnh thiếu sha256 trong data/raw/people-*.csv -> data/raw/fetched/ (chạy lại được).
+"""Tải ảnh trong data/raw/people-*.csv -> data/raw/fetched/ (chạy lại được).
 
-    python scripts/fetch_missing_images.py                 # tải
+    python scripts/fetch_missing_images.py                 # chỉ ảnh thiếu sha256
+    python scripts/fetch_missing_images.py --all           # mọi ảnh (để mã hóa ảnh, bước 3)
     python scripts/fetch_missing_images.py --dry-run       # chỉ đếm
 Sau đó chạy scripts/merge_data.py: nó đọc nhật ký để điền sha256.
 """
@@ -11,7 +12,7 @@ import time
 from pathlib import Path
 
 from imgsearch.config import get_settings
-from imgsearch.data.fetch import fetch_all, select_targets
+from imgsearch.data.fetch import fetch_all, select_all_targets, select_targets
 from imgsearch.data.merge import RAW_GLOB, raw_files, read_raw
 
 
@@ -23,12 +24,13 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--out", type=Path, default=data / "raw" / "fetched")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--limit", type=int, default=None, help="chỉ tải N URL đầu (thử)")
+    ap.add_argument("--all", action="store_true", help="mọi ảnh, không chỉ ảnh thiếu sha256")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args(argv)
 
     files = raw_files(args.raw, args.glob)
     rows = read_raw(files)
-    targets = select_targets(rows)[: args.limit]
+    targets = (select_all_targets if args.all else select_targets)(rows)[: args.limit]
     print(f"{len(files)} file, {len(rows)} dòng, {len(targets)} URL cần tải")
     if args.dry_run:
         return

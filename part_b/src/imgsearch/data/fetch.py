@@ -2,7 +2,8 @@
 
 Nhật ký JSONL (mỗi URL một dòng, ghi nối tiếp) là đầu vào của merge.resolve_sha, nên chạy lại
 được sau khi bị ngắt: URL đã có kết quả cuối thì bỏ qua. Lỗi tạm (timeout, 5xx, 429) được thử
-lại ở lần chạy sau; lỗi cố định (404, không phải ảnh, quá lớn) thì không.
+lại ở lần chạy sau (kể cả 403: CDN chặn tạm khi tải dồn dập); lỗi cố định (404, không phải
+ảnh, quá lớn) thì không.
 
 Ảnh lưu theo nội dung: {images_dir}/{sha256[:2]}/{sha256}{ext}. Không commit (data/ bị ignore).
 """
@@ -22,7 +23,8 @@ MAX_BYTES = 25 * 1024 * 1024
 TIMEOUT_S = 20
 USER_AGENT = "Mozilla/5.0 (compatible; imgsearch-capstone/0.1; offline dataset fetch)"
 _EXT = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}
-_RETRYABLE = {"timeout", "error", "http_429"} | {f"http_{c}" for c in range(500, 600)}
+# 403 cũng thử lại: CDN ảnh (cloudfront) trả 403 khi tải dồn dập, thử lại sau thì 200.
+_RETRYABLE = {"timeout", "error", "http_403", "http_429"} | {f"http_{c}" for c in range(500, 600)}
 _URL_SAFE = ":/?#[]@!$&'()*+,;=%~"
 
 
@@ -58,6 +60,17 @@ def select_targets(rows: list[dict]) -> list[tuple[str, str | None]]:
         url = r.get("image_url")
         if url and not r.get("sha256") and url not in known:
             out.setdefault(url, r.get("source_url") or None)
+    return list(out.items())
+
+
+def select_all_targets(rows: list[dict]) -> list[tuple[str, str | None]]:
+    """(image_url, referer) của MỌI dòng, bỏ URL trùng: tải file để mã hóa ảnh (bước 3).
+    Ảnh đã có sha256 trong CSV vẫn giữ khóa đó; file tải về chỉ dùng để mã hóa (CDN có thể
+    nén lại nên sha256 của file có thể khác)."""
+    out: dict[str, str | None] = {}
+    for r in rows:
+        if r.get("image_url"):
+            out.setdefault(r["image_url"], r.get("source_url") or None)
     return list(out.items())
 
 
@@ -158,3 +171,14 @@ def fetch_all(
             if on_result:
                 on_result(res)
     return counts
+
+
+def image_files(images: list[dict], log: dict[str, dict]) -> list[tuple[str, str]]:
+    """(image_id, đường dẫn file đã tải) cho ảnh có trong nhật ký tải với trạng thái ok.
+    `images`: bản ghi images.jsonl (cần image_id, image_url)."""
+    out = []
+    for img in images:
+        rec = log.get(img.get("image_url") or "")
+        if rec and rec.get("status") == "ok" and rec.get("path"):
+            out.append((img["image_id"], rec["path"]))
+    return out
