@@ -24,6 +24,8 @@
 /reports/*
 !/reports/.gitkeep
 !/reports/README.md
+!/reports/eval.md
+!/reports/perf.md
 **/bench/results/
 
 # Python
