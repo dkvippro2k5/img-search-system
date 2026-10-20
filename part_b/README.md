@@ -73,6 +73,8 @@ Bước 3 và 6 ghi theo shard, chạy lại thì bỏ qua phần đã xong. B�
 
 Chạy thử bằng `uvicorn imgsearch.api.main:app`. `/healthz` trả 503 cho tới khi nạp xong.
 
+**Demo trên máy có ảnh đã tải** (bước 1): đặt `LOCAL_IMAGES=true` trong `.env`. Web khi đó lấy ảnh từ `../data/raw/fetched/` qua `/img/{image_id}` thay vì hotlink báo gốc: đo trên 12 truy vấn mẫu, 216/219 ảnh có file trên máy, ảnh còn lại chuyển hướng tới URL gốc. Hotlink thì 9–19% ô ảnh trống do CDN chặn tải dồn [Đã đo]. Docker không mount ảnh nên để `false`.
+
 ## 3. Docker (MinIO + API)
 
 ```bash

@@ -106,7 +106,7 @@ flowchart TD
 | Dense văn bản | `retrieval/mentor.py` | qwen3-embedding-4b qua API, cắt còn 1.024 chiều lúc nạp, timeout 1 s, lỗi thì bỏ kênh |
 | Gộp | `retrieval/fusion.py` | RRF `Σ w/(60 + hạng)` |
 | Điều phối | `retrieval/engine.py` | Mỗi bước ghi thời gian vào header `Server-Timing` |
-| API | `api/main.py` | FastAPI `/search`, `/healthz`; semaphore `SEARCH_CONCURRENCY` |
+| API | `api/main.py`, `api/metrics.py` | FastAPI `/search`, `/healthz`, `/metrics`; semaphore `SEARCH_CONCURRENCY` |
 | Web | `web/` | HTML + TypeScript thuần, hiển thị nhóm và chuỗi bằng chứng |
 
 Cách xử lý từng trường hợp:
@@ -228,6 +228,12 @@ Chi tiết ở `reports/perf.md`.
   - `init`: dùng chính image API, tạo bucket private và đẩy `index/v{ver}/`, bỏ qua file đã có;
   - `api`: tải index từ MinIO về volume cache lúc khởi động, rồi nạp.
 - `/healthz` trả 503 cho tới khi nạp xong. Có `REQUIRE_INDEX=true` thì thiếu index là 503 mãi, không chạy với index rỗng.
+- `/metrics` (JSON, tính từ lúc khởi động):
+  - số request theo loại truy vấn, truy vấn rỗng, có thông báo, lỗi;
+  - histogram latency và p50/p95/p99 trên 1.000 request gần nhất;
+  - thời gian trung bình từng bước của `Server-Timing`;
+  - số lời gọi, lỗi và lần bị giới hạn (429) của API mentor.
+- **CI** (GitHub Actions, `.github/workflows/ci.yml`): mỗi lần push `main` hoặc mở pull request thì chạy ruff, pytest (dữ liệu giả, không cần `data/`), rồi build image Docker.
 - Index có phiên bản `index/v{INDEX_VERSION}/` trên S3/MinIO/R2 (đổi bằng `S3_ENDPOINT_URL`). Model ONNX được mount chỉ đọc.
 - Image API: Python 3.12 slim, không torch, chạy bằng user thường. Web được build ở stage Node riêng.
 - Quyền riêng tư:
@@ -260,13 +266,17 @@ Chi tiết ở `reports/perf.md`.
 - Kênh văn bản phụ thuộc tunnel tạm của mentor (URL có thể đổi) và giới hạn 100 request/phút. Khi lỗi, hệ thống tự quay về BM25 + ảnh.
 - Text encoder fp32 chiếm 1,1 GB RAM; tổng RAM API ~2,2 GB.
 - Benchmark chạy trên laptop, k6 cùng máy, chỉ 100 truy vấn lặp lại (chế độ cache vì vậy lạc quan).
+- Web hiển thị ảnh bằng cách hotlink `image_url` gốc của báo. Đo 20/10/2026 trên 196 ảnh đầu của 12 truy vấn demo [Đã đo]:
+  - tải song song: 38 ảnh không tải được, 30 trong số đó từ một CDN ngắt kết nối khi tải dồn;
+  - thử lại tuần tự: còn 17 ảnh hỏng.
+  - Web thử lại ảnh lỗi một lần; vẫn lỗi thì hiện ô "Không tải được ảnh gốc" kèm link bài nguồn.
+  - Demo cục bộ có cờ `LOCAL_IMAGES=true`: ảnh lấy từ ảnh đã tải trên máy qua `/img/{image_id}` (216/219 ảnh có file); chưa dùng được trong Docker.
 
 **Chưa làm**
 - LLM parser fallback: chỉ có cờ `LLM_PARSER_ENABLED`, chưa cài.
-- `/metrics` còn trả rỗng.
 - Thumbnail trên S3: web đang hotlink `image_url` gốc.
 - Dense văn bản chạy local, không phụ thuộc mentor (multilingual-e5).
-- CI/deploy.
+- Deploy lên môi trường thật (CI đã có).
 - Phủ định và đếm số lượng: hệ thống chỉ thông báo hạn chế, chưa xử lý.
 
 ## 9. Hướng mở rộng
