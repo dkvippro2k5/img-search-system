@@ -21,7 +21,9 @@ RUN pip install .
 # --- Stage 3: runtime ---
 FROM python:3.12-slim AS runtime
 ENV PATH="/opt/venv/bin:$PATH" PYTHONUNBUFFERED=1
-RUN useradd --create-home app
+RUN useradd --create-home app \
+    # volume index-cache gắn vào /cache: tạo sẵn thuộc app để volume mới lấy quyền này
+    && mkdir -p /cache && chown app:app /cache
 WORKDIR /app
 COPY --from=build /opt/venv /opt/venv
 COPY --from=web /web/index.html /web/style.css web/

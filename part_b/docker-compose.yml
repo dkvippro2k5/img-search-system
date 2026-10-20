@@ -1,6 +1,10 @@
 services:
+  # Image MinIO chính thức (minio/minio, minio/mc, quay.io/minio) không còn kéo công khai được
+  # (đo 20/10/2026: "pull access denied"). Dùng bản Chainguard, ghim digest. Image không có
+  # shell/curl nên không có healthcheck: init tự chờ MinIO nhận kết nối.
   minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    image: cgr.dev/chainguard/minio@sha256:cff197fef764642223ef9f4444c903d51aee9b544a7be8bc007fef6b7b00d136
+    user: "0:0"  # volume mới tạo thuộc root; user mặc định 65532 không ghi được
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-minioadmin}
@@ -10,43 +14,46 @@ services:
       - "9001:9001"
     volumes:
       - minio-data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
 
-  # Tạo bucket private và upload index/thumbs từ ./data (chạy một lần).
+  # Tạo bucket private và đẩy index/v{INDEX_VERSION}/ lên MinIO (chạy một lần, bỏ qua file
+  # đã có). Dùng chính image của api (boto3), không cần minio/mc.
   init:
-    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    image: imgsearch:local
+    build: .
     depends_on:
-      minio:
-        condition: service_healthy
+      - minio
     environment:
+      S3_ENDPOINT_URL: http://minio:9000
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-minioadmin}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-minioadmin}
       S3_BUCKET: ${S3_BUCKET:-imgsearch}
       INDEX_VERSION: ${INDEX_VERSION:-dev}
     volumes:
-      - ../data:/data:ro
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 $$S3_ACCESS_KEY_ID $$S3_SECRET_ACCESS_KEY &&
-      mc mb --ignore-existing local/$$S3_BUCKET &&
-      mc anonymous set none local/$$S3_BUCKET &&
-      (mc mirror --overwrite /data/index/v$$INDEX_VERSION local/$$S3_BUCKET/index/v$$INDEX_VERSION || true) &&
-      (mc mirror --overwrite /data/thumbs local/$$S3_BUCKET/thumbs || true)
-      "
+      - ../data/index:/data/index:ro
+    command: python -m imgsearch.storage.s3 --src /data/index --wait 60
 
   api:
+    image: imgsearch:local
     build: .
     env_file:
       - path: .env
         required: false
     environment:
       S3_ENDPOINT_URL: http://minio:9000
+      INDEX_VERSION: ${INDEX_VERSION:-dev}
+      # Tải index/v{INDEX_VERSION}/ từ MinIO (do init đẩy lên) về /cache lúc khởi động;
+      # không có index thì /healthz 503, không chạy với index rỗng.
+      INDEX_FROM_S3: "true"
+      REQUIRE_INDEX: "true"
       INDEX_DIR: /cache/index
       MODELS_DIR: /models
+      ONNX_THREADS: "4"  # = cpus bên dưới
+      # numpy (OpenBLAS) mặc định mở luồng theo số lõi của máy (22), không theo giới hạn 4 CPU
+      OPENBLAS_NUM_THREADS: "4"
+      OMP_NUM_THREADS: "4"
+      QUERY_CACHE_SIZE: ${QUERY_CACHE_SIZE:-1024}
+      # 2: thông lượng giữ ổn định khi tăng tải (reports/perf.md: 0 = sụp từ 34 xuống 17 QPS)
+      SEARCH_CONCURRENCY: ${SEARCH_CONCURRENCY:-2}
     ports:
       - "8000:8000"
     volumes:
@@ -75,7 +82,10 @@ services:
     volumes:
       - ./bench:/bench
       - ./testsets:/testsets:ro
-    command: run --summary-export=/bench/results/summary.json /bench/k6/search.js
+    # raw.json: từng request (bench/make_report.py tính p50/p95/p99 theo mức VU, loại truy vấn)
+    command: >
+      run --summary-export=/bench/results/summary.json
+      --out json=/bench/results/raw.json /bench/k6/search.js
 
 volumes:
   minio-data:
