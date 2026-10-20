@@ -145,6 +145,19 @@ class QueryParser:
 
     def _link_exact(self, tokens: list[Token], blocked: list[bool], n_words: int) -> list[Mention]:
         mentions = []
+        words = [t for t in tokens if t.is_word]
+        # Người dùng có viết hoa tên riêng (bỏ qua từ đầu câu) -> cụm chữ thường có dấu là từ
+        # thường: "Kỳ Duyên đăng quang" không phải người tên "Đăng Quang" (S-C-08).
+        cased = any(t.surface[:1].isupper() for t in words[1:])
+        # Token thuộc cụm từ vựng (nghề, quan hệ, "cùng"...): khớp tên chỉ nhờ bỏ dấu thì nhường
+        # cho cụm đó ("quang hoa hậu" không phải "Quang Hòa" + "hậu", S-C-08).
+        free = [False] * len(tokens)
+        in_lexicon = {
+            i
+            for lexicon in (lx.PROTECTED, lx.CO_OCCURRENCE, lx.RELATIONS, lx.CATEGORY_HINTS)
+            for span in lexicon.find(tokens, free)
+            for i in range(span.start, span.end)
+        }
         for block in _word_blocks(tokens):
             a = 0
             while a < len(block):
@@ -159,11 +172,16 @@ class QueryParser:
                     found = self.aliases.lookup(window)
                     # Chữ thường, có dấu nhưng sai dấu so với tên: là từ thường ("vận động"
                     # không phải "Vân Đông"). Viết hoa hoặc không dấu thì vẫn nhận + gợi ý.
+                    lower_marked = any(t.has_marks for t in window) and not all(
+                        t.surface[:1].isupper() for t in window
+                    )
+                    if found and lower_marked and (found[1] == MatchType.FOLDED or cased):
+                        continue
                     if (
                         found
                         and found[1] == MatchType.FOLDED
-                        and any(t.has_marks for t in window)
                         and not all(t.surface[:1].isupper() for t in window)
+                        and in_lexicon.intersection(idxs)
                     ):
                         continue
                     if found:

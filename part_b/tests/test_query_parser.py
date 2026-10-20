@@ -314,3 +314,30 @@ def test_lowercase_accented_words_are_not_a_misaccented_name():
     r = p.parse("vận động viên cầu lông")
     assert r.mentions == [] and r.intents[0].categories == ["athletes"]
     assert [m.person_ids for m in p.parse("Vận Động").mentions] == [("vd",)]  # viết hoa: gợi ý
+
+
+def test_lowercase_exact_name_is_common_word_when_query_capitalizes_names():
+    # S-C-08 (test set): "đăng quang" trùng đúng dấu với người tên "Đăng Quang"
+    p = QueryParser(
+        AliasIndex(
+            [
+                PersonEntry("kd", "Nguyễn Cao Kỳ Duyên", "celeb", ("Kỳ Duyên",)),
+                PersonEntry("dq", "Nguyễn Đăng Quang", "politicer", ("Đăng Quang",)),
+                PersonEntry("qh", "Lê Quang Hòa", "politicer", ("Quang Hòa",)),
+            ]
+        )
+    )
+    r = p.parse("Nguyễn Cao Kỳ Duyên đăng quang hoa hậu")
+    assert r.type == QueryType.SINGLE and r.intents[0].person_ids == ["kd"]
+    # "quang hoa" (không dấu) chồng lên cụm nghề "hoa hậu" -> không phải "Quang Hòa"
+    # (gõ toàn không dấu thì "dang quang" vẫn có thể là tên: mơ hồ thật, không kiểm ở đây)
+    unaccented = p.parse("ky duyen dang quang hoa hau")
+    assert ("qh",) not in [m.person_ids for m in unaccented.mentions]
+    assert [m.person_ids for m in p.parse("quang hoa").mentions] == [("qh",)]
+    # gõ toàn chữ thường thì vẫn là tên; viết hoa thì là tên
+    assert [m.person_ids for m in p.parse("đăng quang").mentions] == [("dq",)]
+    assert [m.person_ids for m in p.parse("ảnh kỳ duyên và đăng quang").mentions] == [
+        ("kd",),
+        ("dq",),
+    ]
+    assert [m.person_ids for m in p.parse("Kỳ Duyên và Đăng Quang").mentions] == [("kd",), ("dq",)]
