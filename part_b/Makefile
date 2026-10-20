@@ -1,6 +1,7 @@
-.PHONY: install install-index lint format test web run merge thumbs index eval up down bench
+.PHONY: install install-index lint format test web run fetch merge encode index text eval up down bench
 
 PY ?= python
+VER ?= people
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -25,18 +26,27 @@ web:
 run:
 	uvicorn imgsearch.api.main:app --reload --port 8000
 
-# --- Dựng dữ liệu và index (đọc đầu ra Phần A trong ../data) ---
+# --- Dựng dữ liệu và index từ ../data/raw/people-*.csv (không có trong repo) ---
+fetch:
+	$(PY) scripts/fetch_missing_images.py --all
+
 merge:
 	$(PY) scripts/merge_data.py
 
-thumbs:
-	$(PY) scripts/make_thumbs.py
+# cần extra embed (torch CPU)
+encode:
+	$(PY) -X utf8 scripts/encode_images.py
+	$(PY) -X utf8 scripts/export_text_encoder.py
 
 index:
-	$(PY) scripts/build_index.py
+	$(PY) scripts/build_index.py --input ../data/merged/people --version $(VER)
+
+# kênh văn bản: cần index và key mentor trong .env
+text:
+	$(PY) -X utf8 scripts/encode_texts.py --index-version $(VER) --write-index
 
 eval:
-	$(PY) -m imgsearch.eval.run_eval
+	$(PY) -X utf8 -m imgsearch.eval.run_testset --index-version $(VER) --split dev
 
 # --- Docker ---
 up:
@@ -46,5 +56,4 @@ down:
 	docker compose down
 
 bench:
-	docker compose --profile bench run --rm bench
-	$(PY) bench/make_report.py
+	$(PY) bench/run_bench.py
