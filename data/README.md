@@ -6,7 +6,8 @@
 |---|---|
 | `raw/` | `people-*.csv` (ảnh người đã duyệt của team, đọc bởi `part_b/scripts/merge_data.py`); `raw/fetched/`: ảnh tải bù cho dòng thiếu sha256 (`fetch_log.jsonl` + `images/{sha[:2]}/`) |
 | `labels/` | Nhãn duyệt tay (auto_flag, nhãn cuối, lý do reject), tập tự gán nhãn watermark/NSFW/nhạy cảm |
-| `merged/` | Đầu ra `scripts/merge_data.py`: dữ liệu hợp nhất, khóa `(entity_id, sha256)` |
-| `features/` | Parquet / `.npy` đặc trưng và điểm của Phần A (T1-T3), embedding mặt và ảnh |
-| `index/v{INDEX_VERSION}/` | `meta.sqlite`, `lexical.npz` (BM25), `text.faiss`, (tùy chọn) `image.faiss`, `manifest.json` |
-| `thumbs/` | Thumbnail WebP: `{sha256[:2]}/{sha256}.webp` |
+| `merged/` | Đầu ra `scripts/merge_data.py`: `people/` (JSONL, định dạng ở `part_b/src/imgsearch/data/dataset.py`, kèm `merge_report.json`); `golden-*/` từ `scripts/golden_to_dataset.py` |
+| `features/` | `image_embeddings.{npy,ids.txt,json}` (SigLIP2, `encode_images.py`), `text_embeddings.*` (qwen3, `encode_texts.py`), `shards/` + `text_shards/` để chạy tiếp; sau này thêm đặc trưng của Phần A |
+| `index/v{INDEX_VERSION}/` | `meta.sqlite` (metadata + KG), `lexical.npz` (BM25), `dense.npz` (vector ảnh), `text_dense.npz` (vector văn bản), `manifest.json` |
+| `golden/` | Bộ golden (README ở đó): hệ thống chỉ đọc `metadata.json` + `images/`, `gold/` chỉ dùng khi chấm |
+| `thumbs/` | Chưa dùng: web hotlink `image_url` gốc |
