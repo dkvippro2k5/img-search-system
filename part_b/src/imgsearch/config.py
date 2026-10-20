@@ -27,8 +27,16 @@ class Settings(BaseSettings):
     # True: presigned URL tới thumbs/{sha256[:2]}/{sha256}.webp trên S3.
     thumbs_from_s3: bool = False
 
-    text_encoder: str = "multilingual-e5-small"
-    use_image_embedding: bool = False
+    # Dense (retrieval/dense.py): bật khi index có dense.npz và có model ở models_dir/dense_model.
+    dense_enabled: bool = True
+    dense_model: str = "siglip2-b32"
+    dense_onnx_file: str = "text.onnx"  # int8 lệch quá nhiều (cosine 0,83–0,94), không dùng
+    # Trọng số RRF của kênh ảnh so với BM25 (= 1). bench/dense_bakeoff.py: khi KHÔNG có caption,
+    # ảnh nặng hơn tốt hơn (văn bản ít, BM25 hay trượt); khi có caption nên hạ về ~1.
+    dense_weight: float = 2.0
+    # Bỏ kết quả dense có xác suất khớp SigLIP sigmoid(scale·cos + bias) thấp hơn ngưỡng này
+    # (câu vô nghĩa "xyz abc": p < 0,01; truy vấn thật: top 10 p > 0,3). Không có bias: bỏ qua.
+    dense_min_prob: float = 0.1
 
     llm_parser_enabled: bool = False
     llm_timeout_seconds: float = 1.5

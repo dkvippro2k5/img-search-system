@@ -46,10 +46,13 @@ services:
     environment:
       S3_ENDPOINT_URL: http://minio:9000
       INDEX_DIR: /cache/index
+      MODELS_DIR: /models
     ports:
       - "8000:8000"
     volumes:
       - index-cache:/cache
+      # text encoder ONNX cho dense (scripts/export_text_encoder.py); không có thì chỉ BM25
+      - ../models:/models:ro
     depends_on:
       init:
         condition: service_completed_successfully

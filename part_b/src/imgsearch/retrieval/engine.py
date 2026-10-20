@@ -3,10 +3,13 @@
 Luồng xử lý: PLAN.md 4.4. Hành vi theo từng kịch bản được kiểm ở tests/test_engine_search.py
 (tên test theo mã SCENARIOS.md). Mỗi bước ghi thời gian vào `timings` (ms) cho Server-Timing.
 
-Hiện chỉ có BM25. Khi thêm dense, gộp hai danh sách bằng fusion.rrf trong `_retrieve`;
-các phần còn lại không phải đổi.
+Truy xuất một ý định (`_retrieve`): BM25 + dense (vector ảnh, nếu index có dense.npz) gộp
+bằng fusion.rrf có trọng số `dense_weight`. Dense nhận phần mô tả đã bỏ tên người ("Hari Won
+mặc váy cưới" -> "mặc váy cưới"): model ảnh không biết mặt người nổi tiếng, danh tính đến từ
+lọc person.
 """
 
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -16,6 +19,8 @@ from imgsearch.config import Settings
 from imgsearch.retrieval import lexicon as lx
 from imgsearch.retrieval import multi_hop, multi_intent
 from imgsearch.retrieval.aliases import AliasIndex
+from imgsearch.retrieval.dense import DenseIndex, OnnxTextEncoder, TextEncoder, min_cosine
+from imgsearch.retrieval.fusion import rrf
 from imgsearch.retrieval.lexical import LexicalIndex
 from imgsearch.retrieval.query_parser import (
     Intent,
@@ -56,12 +61,15 @@ class _Draft:
 
 
 class SearchEngine:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, text_encoder: TextEncoder | None = None):
+        """`text_encoder`: thay encoder ONNX (test dùng encoder giả, không cần file model)."""
         self.settings = settings
+        self._text_encoder = text_encoder
         self.ready = False
         self.n_images = 0
         self.store: MetaStore | None = None
         self.lexical: LexicalIndex | None = None
+        self.dense: DenseIndex | None = None
         self.parser = QueryParser(AliasIndex([]))
         self.unsafe_ids: set[str] = set()
         self._s3 = None
@@ -69,7 +77,7 @@ class SearchEngine:
     def load(self) -> None:
         """Nạp index/v{INDEX_VERSION}/ nếu có và dựng từ điển person.
 
-        TODO: tải từ S3 khi INDEX_FROM_S3; nạp text.faiss; bắt buộc có index khi chạy Docker.
+        TODO: tải từ S3 khi INDEX_FROM_S3; bắt buộc có index khi chạy Docker.
         """
         meta = self.settings.index_path / "meta.sqlite"
         if meta.exists():
@@ -80,6 +88,7 @@ class SearchEngine:
             self.unsafe_ids = self.store.unsafe_image_ids(
                 self.settings.nsfw_block_score, self.settings.unsafe_flags
             )
+            self.dense = self._load_dense()
             log.info(
                 "Đã nạp %s: %d ảnh, %d person, %d ảnh bị lọc an toàn",
                 meta,
@@ -91,12 +100,42 @@ class SearchEngine:
             log.warning("Không thấy %s, chạy với index rỗng", meta)
         self.ready = True
 
+    def _load_dense(self) -> DenseIndex | None:
+        """Lỗi ở đây không chặn khởi động: log cảnh báo và chạy chỉ BM25."""
+        s = self.settings
+        path = s.index_path / "dense.npz"
+        if not s.dense_enabled or not path.exists():
+            return None
+        manifest = json.loads((s.index_path / "manifest.json").read_text(encoding="utf-8"))
+        model = manifest.get("dense", {}).get("model")
+        if model != s.dense_model:
+            log.warning(
+                "dense.npz dựng bằng %s nhưng DENSE_MODEL=%s: tắt dense", model, s.dense_model
+            )
+            return None
+        try:
+            encoder = self._text_encoder or OnnxTextEncoder(s.models_dir / model, s.dense_onnx_file)
+            meta = getattr(encoder, "meta", {})
+            dense = DenseIndex.load(
+                path,
+                self.lexical.image_ids,
+                encoder,
+                self.lexical.allowed_rows,
+                min_cosine(meta, s.dense_min_prob),
+            )
+        except (OSError, ValueError) as e:
+            log.warning("Không nạp được dense (%s): chạy chỉ BM25", e)
+            return None
+        log.info("Dense %s: %.1f%% ảnh có vector", model, 100 * dense.coverage)
+        return dense
+
     def info(self) -> dict:
         return {
             "index_version": self.settings.index_version,
             "index_loaded": self.store is not None,
             "n_images": self.n_images,
             "n_persons": len(self.parser.aliases),
+            "dense": self.dense.encoder.name if self.dense else None,
         }
 
     # --- điểm vào ---
@@ -156,7 +195,10 @@ class SearchEngine:
             for pid in intent.person_ids:
                 draft.groups.append(
                     _Group(
-                        self._person_label(pid), "person", self._retrieve(intent.text, [pid]), [pid]
+                        self._person_label(pid),
+                        "person",
+                        self._retrieve(intent.text, [pid], mentions=intent.mentions),
+                        [pid],
                     )
                 )
             return
@@ -164,7 +206,7 @@ class SearchEngine:
             _Group(
                 self._intent_label(intent),
                 "intent",
-                self._retrieve(intent.text, intent.person_ids, intent.categories),
+                self._retrieve(intent.text, intent.person_ids, intent.categories, intent.mentions),
                 intent.person_ids,
             )
         )
@@ -188,7 +230,9 @@ class SearchEngine:
                 _Group(
                     self._intent_label(intent),
                     "intent",
-                    self._retrieve(intent.text, intent.person_ids, intent.categories),
+                    self._retrieve(
+                        intent.text, intent.person_ids, intent.categories, intent.mentions
+                    ),
                     intent.person_ids,
                 )
             )
@@ -249,25 +293,45 @@ class SearchEngine:
     # --- truy xuất ---
 
     def _retrieve(
-        self, text: str, person_ids: list[str], categories: list[str] | None = None
+        self,
+        text: str,
+        person_ids: list[str],
+        categories: list[str] | None = None,
+        mentions: list[str] | None = None,
     ) -> Ranked:
         """Xếp hạng ảnh cho một ý định.
 
-        - Có person: ảnh khớp từ khóa của person đó đứng trước, rồi mọi ảnh còn lại của
-          person (không làm mất ảnh chỉ vì caption không nhắc tới mô tả, S1).
-        - Không person: BM25 toàn bộ (giới hạn theo nghề nếu có), đa dạng hóa theo người.
+        - Có person: ảnh khớp mô tả của person đó đứng trước (BM25 + dense trên phần mô tả đã bỏ
+          tên), rồi mọi ảnh còn lại của person (không làm mất ảnh chỉ vì caption không nhắc tới
+          mô tả, S1).
+        - Không person: BM25 + dense toàn bộ (giới hạn theo nghề nếu có), đa dạng hóa theo người.
         """
         pool = self.settings.candidate_pool
         if person_ids:
             hits = self.lexical.search(text, limit=pool, person_ids=person_ids)
+            desc = _residual(text, mentions or [])
+            if desc and self.dense:
+                hits = self._fuse(hits, self.dense.search(desc, pool, person_ids=person_ids))
             seen = {i for i, _ in hits}
             return hits + [(i, 0.0) for i in self.store.images_of(person_ids) if i not in seen]
 
         hits = self.lexical.search(text, limit=pool, categories=categories) if categories else []
         if not hits:
             hits = self.lexical.search(text, limit=pool)
+        if self.dense:
+            dense = self.dense.search(text, pool, categories=categories) if categories else []
+            hits = self._fuse(hits, dense or self.dense.search(text, pool))
         persons = self.store.persons_of([i for i, _ in hits])
         return multi_intent.diversify(hits, persons, self.settings.per_person_cap)
+
+    def _fuse(self, lexical: Ranked, dense: Ranked) -> Ranked:
+        if not dense:
+            return lexical
+        fused = rrf(
+            [[i for i, _ in lexical], [i for i, _ in dense]],
+            weights=[1.0, self.settings.dense_weight],
+        )
+        return fused[: self.settings.candidate_pool]
 
     def _co_occurrence_group(self, raw: str, intents: list[Intent]) -> _Group | None:
         common = multi_intent.intersect(set(self.store.images_of(i.person_ids)) for i in intents)

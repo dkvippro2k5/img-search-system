@@ -47,12 +47,21 @@ class LexicalIndex:
         terms = query_terms(text)
         if not terms:
             return []
-        allowed = None
-        if person_ids:
-            allowed = np.array(self.store.vec_rows_of(person_ids), dtype=np.int64)
-        elif categories:
-            parts = [self.category_rows[c] for c in categories if c in self.category_rows]
-            allowed = np.unique(np.concatenate(parts)) if parts else np.empty(0, dtype=np.int64)
+        allowed = self.allowed_rows(person_ids, categories)
         if allowed is not None and len(allowed) == 0:
             return []
         return [(self.image_ids[d], s) for d, s in self.bm25.search(terms, limit, allowed)]
+
+    def allowed_rows(
+        self,
+        person_ids: Collection[str] | None = None,
+        categories: Collection[str] | None = None,
+    ) -> np.ndarray | None:
+        """vec_row được phép: ảnh của `person_ids`, nếu không thì ảnh của người thuộc
+        `categories`; None = mọi ảnh. Dùng chung cho BM25 và dense."""
+        if person_ids:
+            return np.array(self.store.vec_rows_of(person_ids), dtype=np.int64)
+        if categories:
+            parts = [self.category_rows[c] for c in categories if c in self.category_rows]
+            return np.unique(np.concatenate(parts)) if parts else np.empty(0, dtype=np.int64)
+        return None
