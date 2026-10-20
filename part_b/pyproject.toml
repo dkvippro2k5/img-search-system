@@ -33,6 +33,15 @@ index = [
     "tqdm>=4.66",
     "requests>=2.32",
 ]
+# Mã hóa ảnh và xuất text encoder sang ONNX (offline, bước 3). torch bản CPU:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+embed = [
+    "torch>=2.4",
+    "open_clip_torch>=2.30",
+    "transformers>=4.45",
+    "onnx>=1.16",
+    "onnxscript>=0.1",
+]
 dev = [
     "ruff>=0.6",
     "pytest>=8.2",
