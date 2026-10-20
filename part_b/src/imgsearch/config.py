@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # False: hiển thị bằng image_url gốc (hotlink, PLAN 7.2 [Cần xác nhận]);
     # True: presigned URL tới thumbs/{sha256[:2]}/{sha256}.webp trên S3.
     thumbs_from_s3: bool = False
+    # Demo cục bộ: ảnh lấy từ ảnh đã tải trên máy (data/raw/fetched, fetch_missing_images.py)
+    # qua /img/{image_id}, không có thì chuyển hướng tới image_url. Hotlink hỏng 9–19% ảnh do
+    # CDN chặn tải dồn (docs/architecture.md). Docker không mount ảnh nên để tắt.
+    local_images: bool = False
 
     # Dense (retrieval/dense.py): bật khi index có dense.npz và có model ở models_dir/dense_model.
     dense_enabled: bool = True

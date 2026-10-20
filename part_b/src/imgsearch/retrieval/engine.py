@@ -508,6 +508,8 @@ class SearchEngine:
         ]
 
     def _thumb_url(self, row: dict) -> str:
+        if self.settings.local_images:
+            return f"/img/{row['image_id']}"
         if self.settings.thumbs_from_s3:
             if self._s3 is None:
                 self._s3 = s3.client(self.settings)

@@ -3,20 +3,23 @@
 Latency truy xuất được báo qua header Server-Timing theo từng bước (PLAN.md 4.6).
 """
 
+import re
 import threading
 import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from imgsearch.api.local_images import LocalImages
 from imgsearch.api.metrics import Metrics
 from imgsearch.api.schemas import SearchRequest, SearchResponse
 from imgsearch.config import get_settings
 from imgsearch.retrieval.engine import SearchEngine
 
-state: dict[str, SearchEngine | None] = {"engine": None}
+state: dict = {"engine": None, "local_images": None}
+_IMAGE_ID = re.compile(r"[0-9a-f]{64}")
 # Giới hạn số truy vấn tính toán cùng lúc (SEARCH_CONCURRENCY); request còn lại xếp hàng.
 # Không giới hạn thì N request x (ONNX + numpy nhiều luồng) tranh nhau vài CPU, thông lượng
 # giảm khi tăng tải (reports/perf.md).
@@ -31,8 +34,11 @@ async def lifespan(app: FastAPI):
     engine = SearchEngine(settings)
     engine.load()  # tải index (từ S3 nếu INDEX_FROM_S3) rồi mới báo healthy
     state["engine"] = engine
+    if settings.local_images and engine.store is not None:
+        state["local_images"] = LocalImages(settings.data_dir, engine.store)
     yield
     state["engine"] = None
+    state["local_images"] = None
 
 
 app = FastAPI(title="imgsearch", version="0.1.0", lifespan=lifespan)
@@ -70,6 +76,20 @@ def search(req: SearchRequest, response: Response) -> SearchResponse:
         f"{name};dur={ms:.1f}" for name, ms in timings.items()
     )
     return result
+
+
+@app.get("/img/{image_id}", response_model=None)
+def local_image(image_id: str) -> Response:
+    """Demo cục bộ (LOCAL_IMAGES=true): trả ảnh đã tải trên máy; không có file thì chuyển hướng
+    tới image_url gốc."""
+    images: LocalImages | None = state["local_images"]
+    if images is None or not _IMAGE_ID.fullmatch(image_id):
+        return Response(status_code=404)
+    path = images.path(image_id)
+    if path is not None:
+        return FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
+    url = images.url(image_id)
+    return RedirectResponse(url, status_code=302) if url else Response(status_code=404)
 
 
 @app.get("/metrics")
