@@ -4,6 +4,7 @@
 interface ImageHit {
   image_id: string;
   thumb_url: string;
+  image_url?: string | null;
   score: number;
   person_ids: string[];
   description?: string | null;
@@ -275,8 +276,14 @@ function renderHit(hit: ImageHit, group: ResultGroup): HTMLElement {
 
 function openViewer(hit: ImageHit, group: ResultGroup): void {
   const img = $<HTMLImageElement>("viewer-img");
-  img.src = hit.thumb_url;
   img.referrerPolicy = "no-referrer";
+  // Ảnh gốc (thumb_url có thể chỉ là thumbnail 320 px); hotlink hỏng thì quay về thumbnail.
+  const full = hit.image_url || hit.thumb_url;
+  img.onerror = () => {
+    img.onerror = null;
+    if (img.src !== hit.thumb_url) img.src = hit.thumb_url;
+  };
+  img.src = full;
   img.alt = hit.description ?? "";
   const cap = $("viewer-caption");
   cap.replaceChildren(link(hit.source_url, hit.description ?? "Nguồn"));

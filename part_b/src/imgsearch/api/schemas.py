@@ -26,6 +26,8 @@ class SearchRequest(BaseModel):
 class ImageHit(BaseModel):
     image_id: str
     thumb_url: str
+    # Ảnh cỡ gốc cho ô xem ảnh (thumb_url có thể là thumbnail 320 px trên S3); None: chỉ có thumb.
+    image_url: str | None = None
     score: float
     person_ids: list[str] = []
     description: str | None = None  # tiêu đề bài báo nguồn, hiện để người dùng tự đánh giá (Q5)

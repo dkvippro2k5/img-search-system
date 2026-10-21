@@ -524,6 +524,7 @@ class SearchEngine:
                     ImageHit(
                         image_id=i,
                         thumb_url=self._thumb_url(rows[i]),
+                        image_url=self._image_url(rows[i]),
                         score=round(s, 4),
                         person_ids=sorted(persons.get(i, [])),
                         description=rows[i]["description"],
@@ -541,6 +542,12 @@ class SearchEngine:
         if self._s3 is not None and row["image_id"] in self.thumb_ids:
             return self._presign(row["image_id"])
         return row["image_url"] or ""
+
+    def _image_url(self, row: dict) -> str | None:
+        """Ảnh cỡ gốc cho ô xem ảnh (thumbnail S3 chỉ 320 px)."""
+        if self.settings.local_images:
+            return f"/img/{row['image_id']}"
+        return row["image_url"] or None
 
     def _presign(self, image_id: str) -> str:
         """Dùng lại URL đã ký trong cùng cửa sổ nửa hạn (PRESIGN_TTL_SECONDS / 2): URL ổn định
