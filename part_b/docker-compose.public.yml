@@ -39,6 +39,15 @@ services:
       - "127.0.0.1:8001:8000"  # chỉ để tự kiểm trên máy; người ngoài vào qua tunnel
     volumes:
       - public-cache:/cache
+    # Lần đầu (volume trống) lifespan tải index + text.onnx (~1,5–2 GB) từ R2 trước khi uvicorn
+    # nghe cổng; start-period 60 s của image không đủ, cloudflared sẽ bỏ cuộc vì api "unhealthy".
+    # Trong start_period lỗi không bị tính, healthy ngay khi /healthz trả 200 nên lần sau vẫn nhanh.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      start_period: 30m
+      retries: 5
     deploy:
       resources:
         limits:
