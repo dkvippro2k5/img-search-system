@@ -87,6 +87,8 @@ class Settings(BaseSettings):
     # trống = không hỏi) và số /search tối đa mỗi IP mỗi phút (0 = không giới hạn).
     demo_password: str = ""
     rate_limit_per_minute: int = 0
+    # Số lần gửi sai mật khẩu mỗi IP mỗi phút; quá thì 429, không thử mật khẩu (chống dò).
+    auth_fail_per_minute: int = 10
     # Số truy vấn được tính toán đồng thời (api/main.py); 0 = không giới hạn.
     search_concurrency: int = 0
 

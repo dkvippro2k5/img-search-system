@@ -28,6 +28,7 @@ _n = get_settings().search_concurrency
 _gate = threading.BoundedSemaphore(_n) if _n > 0 else None
 metrics_store = Metrics()
 _limiter = RateLimiter(get_settings().rate_limit_per_minute)
+_auth_fails = RateLimiter(get_settings().auth_fail_per_minute)
 
 
 @asynccontextmanager
@@ -49,13 +50,22 @@ app = FastAPI(title="imgsearch", version="0.1.0", lifespan=lifespan)
 @app.middleware("http")
 async def access_control(request: Request, call_next):
     """Bản public (X4): DEMO_PASSWORD hỏi mật khẩu cho mọi đường dẫn trừ /healthz (healthcheck
-    của Docker); RATE_LIMIT_PER_MINUTE giới hạn /search theo IP."""
+    của Docker); RATE_LIMIT_PER_MINUTE giới hạn /search theo IP. Gửi sai mật khẩu quá
+    AUTH_FAIL_PER_MINUTE lần/phút thì 429 mà không thử mật khẩu nữa."""
     settings = get_settings()
     path = request.url.path
     pw = settings.demo_password
-    if pw and path != "/healthz" and not authorized(request, pw):
-        realm = 'Basic realm="imgsearch demo", charset="UTF-8"'
-        return Response(status_code=401, headers={"WWW-Authenticate": realm})
+    if pw and path != "/healthz":
+        ip = client_ip(request)
+        if _auth_fails.per_minute and _auth_fails.blocked(ip):
+            body = {"detail": "Sai mật khẩu quá nhiều lần, thử lại sau một phút."}
+            return JSONResponse(body, status_code=429, headers={"Retry-After": "60"})
+        if not authorized(request, pw):
+            # Request chưa kèm mật khẩu (trình duyệt trước khi hỏi) không tính là lần thử sai.
+            if "authorization" in request.headers and _auth_fails.per_minute:
+                _auth_fails.allow(ip)
+            realm = 'Basic realm="imgsearch demo", charset="UTF-8"'
+            return Response(status_code=401, headers={"WWW-Authenticate": realm})
     if _limiter.per_minute and path == "/search" and not _limiter.allow(client_ip(request)):
         body = {"detail": "Quá nhiều truy vấn, thử lại sau ít giây."}
         return JSONResponse(body, status_code=429, headers={"Retry-After": "10"})

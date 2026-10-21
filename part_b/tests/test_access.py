@@ -39,6 +39,22 @@ def test_password_required_except_healthz(client):
     assert client.get("/metrics", headers=basic("mật-khẩu")).status_code == 200
 
 
+def test_non_ascii_auth_header_is_401_not_500(client):
+    # Starlette giải mã header bằng latin-1; b64decode ném ValueError với chuỗi không ASCII.
+    r = client.get("/", headers={"Authorization": "Basic é".encode("latin-1")})
+    assert r.status_code == 401
+
+
+def test_failed_logins_are_throttled_per_ip(client, monkeypatch):
+    monkeypatch.setattr(main, "_auth_fails", RateLimiter(2))
+    get = lambda ip, h: client.get("/", headers={**h, "CF-Connecting-IP": ip})  # noqa: E731
+    assert [get("3.3.3.3", {}).status_code for _ in range(3)] == [401] * 3  # chưa thử mật khẩu
+    assert [get("3.3.3.3", basic("sai")).status_code for _ in range(2)] == [401, 401]
+    assert get("3.3.3.3", basic("sai")).status_code == 429
+    assert get("3.3.3.3", basic("mật-khẩu")).status_code == 429  # bị chặn trước khi thử
+    assert get("4.4.4.4", basic("mật-khẩu")).status_code == 200
+
+
 def test_rate_limit_per_ip(client, monkeypatch):
     monkeypatch.setattr(main, "_limiter", RateLimiter(2))
     auth = basic("mật-khẩu")
@@ -52,3 +68,4 @@ def test_rate_limit_per_ip(client, monkeypatch):
 def test_rate_limiter_window():
     lim = RateLimiter(1)
     assert lim.allow("a", now=0) and not lim.allow("a", now=30) and lim.allow("a", now=61)
+    assert lim.blocked("a", now=62) and not lim.blocked("a", now=122) and not lim.blocked("b")

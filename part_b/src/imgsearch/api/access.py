@@ -6,7 +6,6 @@ Sau Cloudflare Tunnel mọi request đều đến từ 127.0.0.1, nên IP lấy 
 """
 
 import base64
-import binascii
 import secrets
 import threading
 import time
@@ -22,7 +21,7 @@ def authorized(request: Request, password: str) -> bool:
         return False
     try:
         _, _, given = base64.b64decode(value).decode("utf-8").partition(":")
-    except (binascii.Error, UnicodeDecodeError):
+    except ValueError:  # binascii.Error, UnicodeDecodeError, chuỗi không phải ASCII
         return False
     return secrets.compare_digest(given.encode(), password.encode())
 
@@ -41,13 +40,24 @@ class RateLimiter:
         self._hits: dict[str, deque[float]] = defaultdict(deque)
         self._lock = threading.Lock()
 
+    def _recent(self, key: str, now: float) -> deque[float]:
+        q = self._hits[key]
+        while q and now - q[0] >= 60:
+            q.popleft()
+        return q
+
     def allow(self, key: str, now: float | None = None) -> bool:
+        """Ghi một lần và trả False nếu đã đủ hạn mức."""
         now = time.monotonic() if now is None else now
         with self._lock:
-            q = self._hits[key]
-            while q and now - q[0] >= 60:
-                q.popleft()
+            q = self._recent(key, now)
             if len(q) >= self.per_minute:
                 return False
             q.append(now)
             return True
+
+    def blocked(self, key: str, now: float | None = None) -> bool:
+        """Đã đủ hạn mức chưa, không ghi thêm (chặn trước khi thử mật khẩu)."""
+        now = time.monotonic() if now is None else now
+        with self._lock:
+            return len(self._recent(key, now)) >= self.per_minute
