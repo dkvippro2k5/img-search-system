@@ -109,3 +109,6 @@ def test_engine_presigns_listed_thumbs_and_hotlinks_the_rest(mini_index, tmp_pat
     urls = {h.image_id: h.thumb_url for h in hits}
     assert urlparse(urls[DEN1]).netloc == "localhost:9000"
     assert urls[DEN2].startswith("https://example.com/")  # không có thumbnail: hotlink
+    # cùng cửa sổ nửa hạn: URL giữ nguyên để trình duyệt cache được
+    again = e.search(SearchRequest(query="Đen Vâu"))[0].groups[0].hits
+    assert {h.image_id: h.thumb_url for h in again}[DEN1] == urls[DEN1]

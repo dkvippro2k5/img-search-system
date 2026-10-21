@@ -91,7 +91,7 @@ curl http://localhost:8000/healthz  # 200 khi đã tải index từ MinIO và n�
 
 ## 4. Bản public: Cloudflare R2 + Cloudflare Tunnel
 
-API chạy trên máy này (cùng cấu hình 4 CPU / 4 GB đã benchmark). Index, model và thumbnail nằm trên bucket R2 private; trình duyệt tải thumbnail thẳng từ R2 bằng presigned URL 10 phút. Người ngoài vào qua tunnel `*.trycloudflare.com`, phải nhập mật khẩu dùng chung.
+API chạy trên máy này (cùng cấu hình 4 CPU / 4 GB đã benchmark). Index, model và thumbnail nằm trên bucket R2 private; trình duyệt tải thumbnail thẳng từ R2 bằng presigned URL hạn 6 giờ (dùng lại trong 3 giờ để trình duyệt cache được). Người ngoài vào qua tunnel `*.trycloudflare.com`, phải nhập mật khẩu dùng chung.
 
 ```bash
 # 1. part_b/.env.r2: S3_ENDPOINT_URL (https://<account>.r2.cloudflarestorage.com), S3_BUCKET, key R2

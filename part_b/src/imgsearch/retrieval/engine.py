@@ -12,6 +12,7 @@ bản nhận cả câu (tiêu đề có nhắc tên), gọi mentor song song v�
 
 import json
 import logging
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -92,7 +93,11 @@ class SearchEngine:
         self.parser = QueryParser(AliasIndex([]))
         self.unsafe_ids: set[str] = set()
         self.thumb_ids: set[str] = set()  # ảnh có thumbnail trên S3 (thumbs.txt)
-        self._s3 = None
+        self._s3 = None  # client ký presigned URL thumbnail, tạo một lần trong load()
+        # URL đã ký theo cửa sổ nửa hạn: cùng URL trong cửa sổ để trình duyệt cache được.
+        self._signed: dict[str, str] = {}
+        self._signed_window = -1
+        self._sign_lock = threading.Lock()
 
     def load(self) -> None:
         """Nạp index/v{INDEX_VERSION}/ (tải từ S3 trước nếu INDEX_FROM_S3) và dựng từ điển
@@ -115,6 +120,9 @@ class SearchEngine:
             self.text_dense = self._load_text_dense()
             if self.settings.thumbs_from_s3:
                 self.thumb_ids = read_thumb_list(self.settings.index_path / THUMB_LIST)
+                # boto3.client() trên session mặc định không an toàn khi gọi song song từ các
+                # luồng request, nên tạo ở đây thay vì lười lúc tìm.
+                self._s3 = s3.client(self.settings, public=True) if self.thumb_ids else None
                 log.info("Thumbnail S3: %d ảnh, còn lại hotlink", len(self.thumb_ids))
             log.info(
                 "Đã nạp %s: %d ảnh, %d person, %d ảnh bị lọc an toàn",
@@ -530,11 +538,22 @@ class SearchEngine:
     def _thumb_url(self, row: dict) -> str:
         if self.settings.local_images:
             return f"/img/{row['image_id']}"
-        if self.settings.thumbs_from_s3 and row["image_id"] in self.thumb_ids:
-            if self._s3 is None:
-                self._s3 = s3.client(self.settings, public=True)
-            return s3.presigned_thumb_url(self.settings, row["image_id"], self._s3)
+        if self._s3 is not None and row["image_id"] in self.thumb_ids:
+            return self._presign(row["image_id"])
         return row["image_url"] or ""
+
+    def _presign(self, image_id: str) -> str:
+        """Dùng lại URL đã ký trong cùng cửa sổ nửa hạn (PRESIGN_TTL_SECONDS / 2): URL ổn định
+        để trình duyệt cache (Cache-Control 1 ngày) và luôn còn hạn ít nhất nửa hạn khi trả về."""
+        window = int(time.time() // max(self.settings.presign_ttl_seconds // 2, 1))
+        with self._sign_lock:
+            if window != self._signed_window:
+                self._signed, self._signed_window = {}, window
+            url = self._signed.get(image_id)
+            if url is None:
+                url = s3.presigned_thumb_url(self.settings, image_id, self._s3)
+                self._signed[image_id] = url
+            return url
 
     # --- nhãn, thông báo ---
 

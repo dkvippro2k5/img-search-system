@@ -27,7 +27,9 @@ class Settings(BaseSettings):
     s3_access_key_id: str | None = None
     s3_secret_access_key: str | None = None
     s3_region: str = "us-east-1"
-    presign_ttl_seconds: int = 600
+    # Hạn presigned URL thumbnail. URL được dùng lại trong nửa hạn (engine._thumb_url) để trình
+    # duyệt cache được và ảnh lazy / ô xem ảnh mở muộn vẫn còn hạn ít nhất nửa hạn.
+    presign_ttl_seconds: int = 21600
     # Địa chỉ S3 mà trình duyệt tới được, dùng để ký presigned URL thumbnail. Bỏ trống: như
     # S3_ENDPOINT_URL (R2/AWS). Compose: http://localhost:9000 (API gọi MinIO qua minio:9000).
     s3_public_endpoint_url: str | None = None
