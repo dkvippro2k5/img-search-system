@@ -225,8 +225,16 @@ Chi tiết ở `reports/perf.md`.
 
 - **Docker Compose** gồm 3 service:
   - `minio`: object storage;
-  - `init`: dùng chính image API, tạo bucket private và đẩy `index/v{ver}/`, bỏ qua file đã có;
+  - `init`: dùng chính image API, tạo bucket private và đẩy `index/v{ver}/` + thumbnail, bỏ qua file đã có;
   - `api`: tải index từ MinIO về volume cache lúc khởi động, rồi nạp.
+- **Thumbnail** (PLAN 7.4): WebP 320 px cho 89.305 ảnh có file nguồn, 0,719 GB, 7,9 KB/ảnh [Đã đo]. Lưu ở `thumbs/{id[:2]}/{id}.webp` trên bucket private; trình duyệt tải bằng presigned URL 10 phút, ký với địa chỉ trình duyệt tới được (`S3_PUBLIC_ENDPOINT_URL`). Ảnh không có thumbnail (~0,8%) vẫn hotlink. Đo trên 196 ảnh đầu của 12 truy vấn demo: 194 hiển thị được, 2 hỏng là hotlink tới link đã chết [Đã đo, compose local]; trước đó hotlink toàn bộ hỏng 38/196.
+- **Bản public** (`docker-compose.public.yml`): máy chủ không cần `data/` hay `models/`. API tải index, model ONNX và danh sách thumbnail từ **Cloudflare R2** (bucket private, ~2,6 GB, dưới mức miễn phí 10 GB) lúc khởi động; thumbnail đi thẳng từ R2 tới trình duyệt. Mở ra Internet bằng Cloudflare quick tunnel từ chính máy đã benchmark. Không dùng HF Spaces: Docker Space cần gói trả phí (kiểm 21/10/2026).
+- **An toàn khi public** (X2, X4):
+  - mật khẩu dùng chung (`DEMO_PASSWORD`, HTTP Basic, mọi đường dẫn trừ `/healthz`; thiếu thì compose public không chạy);
+  - giới hạn 30 truy vấn/phút mỗi IP;
+  - client không tắt được lọc an toàn (`ALLOW_UNSAFE_SEARCH=false`);
+  - truy vấn tìm ảnh nhạy cảm của người thật bị từ chối và ghi log (`retrieval/guard.py`): từ khóa rõ ràng luôn chặn; bikini, nội y, gợi cảm, thi thể chỉ chặn khi có tên người; gỡ các kiểu lách "k.h.ỏ.a t.h.â.n", "s e x", "nud3". Dev eval không đổi sau khi thêm (80/82, nDCG@10 0,94) [Đã đo];
+  - nhãn nhóm ghi mô tả là tiêu chí xếp hạng ("Phạm Nhật Vượng · xếp theo “bị bắt”") kèm dòng "không xác nhận sự kiện", để không lặp lại tiền đề sai.
 - `/healthz` trả 503 cho tới khi nạp xong. Có `REQUIRE_INDEX=true` thì thiếu index là 503 mãi, không chạy với index rỗng.
 - `/metrics` (JSON, tính từ lúc khởi động):
   - số request theo loại truy vấn, truy vấn rỗng, có thông báo, lỗi;
@@ -234,7 +242,7 @@ Chi tiết ở `reports/perf.md`.
   - thời gian trung bình từng bước của `Server-Timing`;
   - số lời gọi, lỗi và lần bị giới hạn (429) của API mentor.
 - **CI** (GitHub Actions, `.github/workflows/ci.yml`): mỗi lần push `main` hoặc mở pull request thì chạy ruff, pytest (dữ liệu giả, không cần `data/`), rồi build image Docker.
-- Index có phiên bản `index/v{INDEX_VERSION}/` trên S3/MinIO/R2 (đổi bằng `S3_ENDPOINT_URL`). Model ONNX được mount chỉ đọc.
+- Index có phiên bản `index/v{INDEX_VERSION}/` trên S3/MinIO/R2 (đổi bằng `S3_ENDPOINT_URL`). Model ONNX được mount chỉ đọc (compose local) hoặc tải từ `models/` trên S3 (`MODELS_FROM_S3`, bản public).
 - Image API: Python 3.12 slim, không torch, chạy bằng user thường. Web được build ở stage Node riêng.
 - Quyền riêng tư:
   - bucket để private;
@@ -266,17 +274,14 @@ Chi tiết ở `reports/perf.md`.
 - Kênh văn bản phụ thuộc tunnel tạm của mentor (URL có thể đổi) và giới hạn 100 request/phút. Khi lỗi, hệ thống tự quay về BM25 + ảnh.
 - Text encoder fp32 chiếm 1,1 GB RAM; tổng RAM API ~2,2 GB.
 - Benchmark chạy trên laptop, k6 cùng máy, chỉ 100 truy vấn lặp lại (chế độ cache vì vậy lạc quan).
-- Web hiển thị ảnh bằng cách hotlink `image_url` gốc của báo. Đo 20/10/2026 trên 196 ảnh đầu của 12 truy vấn demo [Đã đo]:
-  - tải song song: 38 ảnh không tải được, 30 trong số đó từ một CDN ngắt kết nối khi tải dồn;
-  - thử lại tuần tự: còn 17 ảnh hỏng.
-  - Web thử lại ảnh lỗi một lần; vẫn lỗi thì hiện ô "Không tải được ảnh gốc" kèm link bài nguồn.
-  - Demo cục bộ có cờ `LOCAL_IMAGES=true`: ảnh lấy từ ảnh đã tải trên máy qua `/img/{image_id}` (216/219 ảnh có file); chưa dùng được trong Docker.
+- Ảnh không có thumbnail (~0,8%) vẫn hotlink `image_url` gốc. Hotlink không ổn định: đo 20/10/2026, hotlink toàn bộ thì 38/196 ảnh hỏng (30 từ một CDN ngắt kết nối khi tải dồn). Web thử lại ảnh lỗi một lần, vẫn lỗi thì hiện ô "Không tải được ảnh gốc" kèm link bài nguồn.
+- Bản public chạy trên laptop qua quick tunnel: URL đổi mỗi lần chạy, chỉ sống khi máy bật; mật khẩu dùng chung, không phải đăng nhập theo người.
+- Chặn truy vấn nhạy cảm chỉ ở mức từ khóa (luôn lách được bằng cách diễn đạt khác); lọc ảnh nhạy cảm thật sự cần điểm của Phần A. Hiện lọc an toàn theo ảnh chặn 0 ảnh vì dữ liệu chưa có điểm `nsfw_score` / `sensitive_flag` nào.
 
 **Chưa làm**
 - LLM parser fallback: chỉ có cờ `LLM_PARSER_ENABLED`, chưa cài.
-- Thumbnail trên S3: web đang hotlink `image_url` gốc.
 - Dense văn bản chạy local, không phụ thuộc mentor (multilingual-e5).
-- Deploy lên môi trường thật (CI đã có).
+- Deploy lên máy chủ riêng có tên miền cố định (hiện là tunnel từ laptop; CI đã có).
 - Phủ định và đếm số lượng: hệ thống chỉ thông báo hạn chế, chưa xử lý.
 
 ## 9. Hướng mở rộng
