@@ -552,7 +552,7 @@ CI (GitHub Actions): lint (ruff), unit test (phân tích truy vấn, RRF, chỉ 
 ---
 
 ## 11. Đề xuất mặc định (nếu không có thay đổi)
-- **Phần A:** pipeline T0–T4, một lần chạy model chung; cải tiến chính là bộ hiệu chỉnh đúng người học từ 18k nhãn, so với baseline 72,9% tự động / 93,4% đúng; gộp entity bằng tên + mặt; NSFW/watermark bằng probe trên embedding; chính trị chỉ gắn cờ cho người; T4 có ngân sách trần.
+- **Phần A** (chuyển future work 21/10/2026, xem mục 3)**:** pipeline T0–T4, một lần chạy model chung; cải tiến chính là bộ hiệu chỉnh đúng người học từ 18k nhãn, so với baseline 72,9% tự động / 93,4% đúng; gộp entity bằng tên + mặt; NSFW/watermark bằng probe trên embedding; chính trị chỉ gắn cờ cho người; T4 có ngân sách trần.
 - **Phần B:** H2 (lai + liên kết person + KG có bằng chứng), **caption là chính**, embedding ảnh tùy chọn theo kết quả đo; FAISS flat + SQLite FTS5, RRF, LLM chỉ làm parser có timeout.
 - **Hạ tầng:** FastAPI + ONNX Runtime, web TS thuần, compose gồm api + MinIO, k6 cho benchmark; bản public dùng R2/S3 (bucket private, presigned URL) + HF Spaces hoặc VPS.
 - **Thứ tự ưu tiên khi thiếu thời gian:** dữ liệu hợp nhất → single-intent + latency → Phần A có số đo → multi-intent → multi-hop → Docker/benchmark → tài liệu → deploy/CI.
