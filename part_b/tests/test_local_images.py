@@ -25,6 +25,7 @@ def client(mini_index, tmp_path_factory):
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv("INDEX_DIR", str(out))
         mp.setenv("INDEX_VERSION", "test")
+        mp.setenv("DEMO_PASSWORD", "")  # .env của máy có thể đặt mật khẩu bản public
         mp.setenv("DATA_DIR", str(data))
         mp.setenv("LOCAL_IMAGES", "true")
         get_settings.cache_clear()

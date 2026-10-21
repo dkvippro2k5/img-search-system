@@ -212,6 +212,7 @@ class SearchEngine:
             "n_persons": len(self.parser.aliases),
             "dense": self.dense.encoder.name if self.dense else None,
             "text_dense": self.text_dense.encoder.name if self.text_dense else None,
+            "allow_unsafe_search": self.settings.allow_unsafe_search,
         }
 
     def mentor_stats(self) -> dict | None:
@@ -250,6 +251,7 @@ class SearchEngine:
 
         t = time.perf_counter()
         safe = self.settings.safe_search_default if req.safe_search is None else req.safe_search
+        safe = safe or not self.settings.allow_unsafe_search  # tắt lọc chỉ khi server cho phép
         groups = self._hydrate(draft.groups, req.top_k, safe) if self.store else []
         timings["hydrate"] = (time.perf_counter() - t) * 1000
 

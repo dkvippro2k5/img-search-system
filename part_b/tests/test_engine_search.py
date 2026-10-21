@@ -224,8 +224,12 @@ def test_Q4_safe_search_on_by_default(engine):
     assert img("hw_nsfw") not in all_ids(run(engine, "bãi biển"))
 
 
-def test_Q4_safe_search_can_be_turned_off(engine):
-    assert img("hw_nsfw") in all_ids(run(engine, "Hari Won", safe_search=False))
+def test_Q4_client_cannot_turn_safe_search_off_unless_allowed(engine, mini_index):
+    assert img("hw_nsfw") not in all_ids(run(engine, "Hari Won", safe_search=False))
+    out, _ = mini_index
+    dev = SearchEngine(Settings(index_dir=out, index_version="test", allow_unsafe_search=True))
+    dev.load()
+    assert img("hw_nsfw") in all_ids(run(dev, "Hari Won", safe_search=False))
 
 
 def test_hits_are_hydrated(engine):

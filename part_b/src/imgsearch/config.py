@@ -71,10 +71,16 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 1.5
 
     safe_search_default: bool = True
+    # false: client không tắt được lọc an toàn (safe_search=false bị bỏ qua); bật khi dev/đo.
+    allow_unsafe_search: bool = False
     # Lọc an toàn (Q4). Ngưỡng và tên cờ là giả định, chờ chính sách của mentor.
     nsfw_block_score: float = 0.8
     unsafe_flags: list[str] = ["nsfw", "sexual"]
     max_query_chars: int = 300
+    # Bản public (api/main.py): mật khẩu dùng chung (HTTP Basic, mọi đường dẫn trừ /healthz;
+    # trống = không hỏi) và số /search tối đa mỗi IP mỗi phút (0 = không giới hạn).
+    demo_password: str = ""
+    rate_limit_per_minute: int = 0
     # Số truy vấn được tính toán đồng thời (api/main.py); 0 = không giới hạn.
     search_concurrency: int = 0
 

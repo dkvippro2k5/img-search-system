@@ -12,6 +12,7 @@ def client(mini_index):
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv("INDEX_DIR", str(out))
         mp.setenv("INDEX_VERSION", "test")
+        mp.setenv("DEMO_PASSWORD", "")  # .env của máy có thể đặt mật khẩu bản public
         get_settings.cache_clear()
         with TestClient(app) as c:
             yield c

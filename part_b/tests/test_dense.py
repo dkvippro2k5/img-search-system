@@ -187,7 +187,7 @@ def test_dense_gets_description_without_the_name(dense_index):
 
 
 def test_Q4_safety_filter_applies_to_dense_hits(dense_index):
-    e = engine(dense_index[0])
+    e = engine(dense_index[0], allow_unsafe_search=True)
     assert img("hw_nsfw") not in ids(search(e, "bãi biển"))
     assert img("hw_nsfw") in ids(search(e, "bãi biển", safe_search=False))
 

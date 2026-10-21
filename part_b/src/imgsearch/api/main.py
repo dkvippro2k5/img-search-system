@@ -8,10 +8,11 @@ import threading
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from imgsearch.api.access import RateLimiter, authorized, client_ip
 from imgsearch.api.local_images import LocalImages
 from imgsearch.api.metrics import Metrics
 from imgsearch.api.schemas import SearchRequest, SearchResponse
@@ -26,6 +27,7 @@ _IMAGE_ID = re.compile(r"[0-9a-f]{64}")
 _n = get_settings().search_concurrency
 _gate = threading.BoundedSemaphore(_n) if _n > 0 else None
 metrics_store = Metrics()
+_limiter = RateLimiter(get_settings().rate_limit_per_minute)
 
 
 @asynccontextmanager
@@ -42,6 +44,22 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="imgsearch", version="0.1.0", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def access_control(request: Request, call_next):
+    """Bản public (X4): DEMO_PASSWORD hỏi mật khẩu cho mọi đường dẫn trừ /healthz (healthcheck
+    của Docker); RATE_LIMIT_PER_MINUTE giới hạn /search theo IP."""
+    settings = get_settings()
+    path = request.url.path
+    pw = settings.demo_password
+    if pw and path != "/healthz" and not authorized(request, pw):
+        realm = 'Basic realm="imgsearch demo", charset="UTF-8"'
+        return Response(status_code=401, headers={"WWW-Authenticate": realm})
+    if _limiter.per_minute and path == "/search" and not _limiter.allow(client_ip(request)):
+        body = {"detail": "Quá nhiều truy vấn, thử lại sau ít giây."}
+        return JSONResponse(body, status_code=429, headers={"Retry-After": "10"})
+    return await call_next(request)
 
 
 @app.get("/healthz")
