@@ -206,7 +206,7 @@ def load_embeddings(
     features_dir: str | Path, name: str = "image_embeddings"
 ) -> tuple[np.ndarray, list[str], dict] | None:
     """Đọc {features_dir}/{name}.npy + .ids.txt (mỗi dòng một image_id, cùng thứ tự) + .json
-    (tên model). Không có thì None. Định dạng ở part_a/README.md; text_embeddings do
+    (tên model). Không có thì None. Định dạng ở data/README.md; text_embeddings do
     scripts/encode_texts.py sinh (kênh văn bản, P3)."""
     base = Path(features_dir) / name
     npy, ids, info = (base.with_suffix(s) for s in (".npy", ".ids.txt", ".json"))

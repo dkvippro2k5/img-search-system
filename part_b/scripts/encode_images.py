@@ -5,7 +5,7 @@
         --out ../data/features/golden                                # bộ golden
 Sau đó: build_index.py --features <out>. Chạy tiếp được: ghi từng shard vào {out}/shards/,
 lần sau bỏ qua ảnh đã có. Ảnh hỏng / không mở được thì bỏ và đếm.
-Đầu ra (hợp đồng ở part_a/README.md): image_embeddings.npy (float16, N×d, đã chuẩn hóa),
+Đầu ra (định dạng ở ../data/README.md): image_embeddings.npy (float16, N×d, đã chuẩn hóa),
 image_embeddings.ids.txt (image_id mỗi dòng), image_embeddings.json (model, thời gian).
 Cần extra "embed" (torch, open_clip). Không dùng ở runtime API.
 """
