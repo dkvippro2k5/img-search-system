@@ -62,7 +62,7 @@ Pipeline hiện tại **tự quyết được 72,9% ảnh với độ đúng 93,
 | Mức | Hạng mục | Điều kiện coi là xong |
 |---|---|---|
 | **Bắt buộc** | Dữ liệu hợp nhất ≥ 80.000 ảnh, dedupe, schema | Script chạy lại được, ra số đếm cuối |
-| Bắt buộc | Phần A: pipeline nhiều tầng có số đo độ chính xác, thông lượng, chi phí | Bảng kết quả so với baseline 72,9% / 93,4% |
+| ~~Bắt buộc~~ Future work (21/10/2026) | Phần A: pipeline nhiều tầng có số đo độ chính xác, thông lượng, chi phí | Không làm trong capstone; thiết kế giữ ở mục 3, hạn chế và cách nối ở [part_a/README.md](../part_a/README.md) |
 | Bắt buộc | Phần B: single, multi-intent, multi-hop chạy được trên toàn bộ index | Test set + điểm đánh giá từng loại |
 | Bắt buộc | Latency < 3 s đo trên 80.000 ảnh, có throughput | Báo cáo p50/p95/p99 + cách đo |
 | Bắt buộc | Web demo, Dockerfile, docker compose, README, tài liệu có sơ đồ | Người khác clone và chạy được |
@@ -72,6 +72,8 @@ Pipeline hiện tại **tự quyết được 72,9% ảnh với độ đúng 93,
 ---
 
 ## 3. Phần A: Xử lý và kiểm duyệt ảnh
+
+> **Cập nhật 21/10/2026:** Phần A chuyển thành future work, không triển khai trong capstone. Mục này giữ làm thiết kế cho bước tiếp theo; xem [part_a/README.md](../part_a/README.md).
 
 ### 3.1 Bài toán trên dữ liệu người
 1. **Chất lượng kỹ thuật:** ảnh lỗi, độ phân giải, tỷ lệ khung hình, nén nặng, mờ.

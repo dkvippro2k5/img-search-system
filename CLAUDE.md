@@ -8,9 +8,9 @@ Capstone cá nhân "Image Data Processing & Retrieval" trên tập ảnh **ngư�
 ## Bố cục repo
 
 - `part_b/`: **trọng tâm hiện tại**. Truy xuất ảnh: package `imgsearch`, API, web, Docker, benchmark, test set. Mặc định mọi việc code là ở đây.
-- `part_a/`: kiểm duyệt ảnh. Người dùng đã có prototype riêng và sẽ đưa vào; không viết lại hay tái cấu trúc Phần A trừ khi được yêu cầu.
+- `part_a/`: kiểm duyệt ảnh, **future work** (quyết định 21/10/2026): chỉ còn README (hạn chế của Phần B do thiếu Phần A, hướng làm, cách nối). Không viết code Phần A trừ khi được yêu cầu.
 - Dùng chung ở gốc: `data/`, `models/`, `reports/`, `docs/`, `capstone/`.
-- **Ranh giới A/B là file, không phải import**: Phần A ghi `data/features/*.parquet|.npy` (khóa `sha256`), Phần B đọc. Hợp đồng file ở [part_a/README.md](part_a/README.md); đổi định dạng thì cập nhật file đó.
+- **Định dạng file embedding** (`data/features/*.{npy,ids.txt,json}`) ở [data/README.md](data/README.md); đổi định dạng thì cập nhật file đó. Nếu làm Phần A sau này, ranh giới A/B là file (khóa `sha256`), không phải import.
 
 ## Lệnh (chạy trong `part_b/`)
 
