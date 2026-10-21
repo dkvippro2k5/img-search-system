@@ -47,6 +47,8 @@ form#search-form { display: flex; gap: 8px; margin-top: 10px; align-items: cente
 #q:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 button { font: inherit; cursor: pointer; }
 form#search-form button { padding: 10px 20px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 600; }
+/* luật display của tác giả (.toggle, .timing...) đè [hidden] mặc định của trình duyệt */
+[hidden] { display: none !important; }
 .toggle { font-size: 13px; color: var(--muted); white-space: nowrap; display: flex; gap: 4px; align-items: center; }
 
 #examples { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }
