@@ -15,7 +15,7 @@ Số liệu gắn nhãn **[Đã đo]** (đo thật, ghi điều kiện) hoặc *
 | Latency HTTP (Docker 4 CPU / 4 GB) | p95 332 ms ở 1 VU, 1,6 s ở 16 VU; **p95 < 3 s ở mọi mức tải**, 0% lỗi [Đã đo] |
 | Thông lượng | 20 QPS (mặc định), 31 QPS khi tắt kênh văn bản của mentor [Đã đo] |
 | Triển khai | Docker Compose (API + MinIO); bản public trên Cloudflare R2 + Cloudflare Tunnel, có mật khẩu |
-| CI | GitHub Actions: ruff, 328 test, build image Docker |
+| CI | GitHub Actions: ruff, 356 test, build image Docker |
 
 Ba loại truy vấn:
 
@@ -218,7 +218,7 @@ Lệnh chạy: [part_b/README.md](part_b/README.md) mục 3–4.
 
 - **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) chạy mỗi lần push `main` hoặc mở pull request:
   1. `ruff check` và `ruff format --check`;
-  2. `pytest`: 328 test trên dữ liệu giả, không cần dữ liệu thật hay key;
+  2. `pytest`: 356 test trên dữ liệu giả, không cần dữ liệu thật hay key;
   3. build image Docker (có cache); image không được push lên registry.
 - **CD**: làm tay, vì index dựng offline từ ảnh người thật:
 
@@ -250,7 +250,7 @@ Dựng lại từ dữ liệu thật, đánh giá và benchmark: [part_b/README.
 ```
 part_b/      truy xuất ảnh
   src/imgsearch/   api, retrieval, kg, data, eval, storage, text
-  tests/           328 test, dữ liệu giả ở tests/fixtures/mini/
+  tests/           356 test, dữ liệu giả ở tests/fixtures/mini/
   testsets/        test set, nhãn chấm tay, truy vấn benchmark
   scripts/ bench/ web/   pipeline offline, benchmark k6, giao diện
 part_a/      kiểm duyệt ảnh: future work (chỉ README)

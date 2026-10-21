@@ -233,7 +233,7 @@ Chi tiết ở `reports/perf.md`.
   - mật khẩu dùng chung (`DEMO_PASSWORD`, HTTP Basic, mọi đường dẫn trừ `/healthz`; thiếu thì compose public không chạy);
   - giới hạn 30 truy vấn/phút mỗi IP; gửi sai mật khẩu quá 10 lần/phút (`AUTH_FAIL_PER_MINUTE`) thì IP đó nhận 429 trong một phút, kể cả khi thử đúng, để không dò được mật khẩu;
   - client không tắt được lọc an toàn (`ALLOW_UNSAFE_SEARCH=false`);
-  - truy vấn tìm ảnh nhạy cảm của người thật bị từ chối và ghi log (`retrieval/guard.py`): từ khóa rõ ràng luôn chặn; bikini, nội y, gợi cảm, thi thể chỉ chặn khi có tên người; gỡ các kiểu lách "k.h.ỏ.a t.h.â.n", "s e x", "nud3". Dev eval không đổi sau khi thêm (80/82, nDCG@10 0,94) [Đã đo];
+  - truy vấn tìm ảnh nhạy cảm của người thật bị từ chối và ghi log (`retrieval/guard.py`): từ khóa rõ ràng luôn chặn; bikini, nội y, gợi cảm, thi thể chỉ chặn khi có tên người; gỡ các kiểu lách "k.h.ỏ.a t.h.â.n", "s e x", "nud3", chữ lặp "địttt"; từ tục tiếng Việt chỉ chặn khi gõ có dấu (bỏ dấu thì "cặc", "đéo" trùng "các", "đeo"), teencode không dấu ("djt", "đcm", "vcl") bắt bằng regex. Rà trên 7.547 tên/alias person và 161 truy vấn test set: không chặn nhầm [Đã đo]; Dev eval không đổi sau khi thêm (80/82, nDCG@10 0,94) [Đã đo];
   - nhãn nhóm ghi mô tả là tiêu chí xếp hạng ("Phạm Nhật Vượng · xếp theo “bị bắt”") kèm dòng "không xác nhận sự kiện", để không lặp lại tiền đề sai.
 - `/healthz` trả 503 cho tới khi nạp xong. Có `REQUIRE_INDEX=true` thì thiếu index là 503 mãi, không chạy với index rỗng.
 - `/metrics` (JSON, tính từ lúc khởi động):

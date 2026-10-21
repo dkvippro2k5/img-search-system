@@ -32,7 +32,9 @@ class Span:
 
 
 class Lexicon:
-    def __init__(self, entries: dict[str, str]):
+    def __init__(self, entries: dict[str, str], exact: bool = False):
+        """exact=True: token phải khớp đúng dạng có dấu, kể cả khi người dùng gõ không dấu."""
+        self.exact = exact
         self._entries = sorted(
             ((tuple(normalize(k).split()), tuple(fold(k).split()), v) for k, v in entries.items()),
             key=lambda e: len(e[0]),
@@ -52,7 +54,7 @@ class Lexicon:
             if len(seq) < k or any(blocked[i : i + k]) or not all(t.is_word for t in seq):
                 continue
             if all(
-                (t.norm == nk) if t.has_marks else (t.fold == fk)
+                (t.norm == nk) if (t.has_marks or self.exact) else (t.fold == fk)
                 for t, nk, fk in zip(seq, norm_key, fold_key, strict=True)
             ):
                 return Span(i, i + k, value)
@@ -224,30 +226,85 @@ COUNT_NOUNS = Lexicon(
 # Truy vấn tìm ảnh nhạy cảm của người thật (X2): từ chối + ghi log (retrieval/guard.py).
 # "strict": luôn chặn. "person": chỉ chặn khi truy vấn có tên người (ảnh loại này có thể công khai,
 # nhưng truy vấn nhắm vào cơ thể / cái chết của một người thật). Chốt với người dùng 21/10/2026.
+# Từ mà dạng bỏ dấu trùng từ thường nằm ở SENSITIVE_MARKED; teencode không dấu ("djt", "đcm",
+# "vcl") ở SENSITIVE_PATTERNS.
 SENSITIVE = Lexicon(
     {
         **{
             k: "strict"
             for k in (
+                # khỏa thân, nội dung tình dục
                 "khỏa thân",
                 "lõa thể",
                 "lõa lồ",
                 "không mặc gì",
-                "nude",
-                "naked",
-                "sex",
-                "porn",
+                "ngực trần",
+                "bán nude",
                 "khiêu dâm",
                 "đồi trụy",
                 "tình dục",
-                "làm tình",
                 "ảnh nóng",
                 "clip nóng",
                 "cảnh nóng",
                 "video nóng",
+                "phim sex",
+                "clip sex",
+                "phim người lớn",
+                "phim cấp ba",
+                "phim heo",
+                # lộ cơ thể
                 "lộ hàng",
                 "lộ ngực",
                 "lộ vòng một",
+                "lộ nhũ hoa",
+                "lộ núm",
+                "lộ điểm nhạy cảm",
+                "vùng kín",
+                "lộ quần lót",
+                "lộ nội y",
+                "tụt áo",
+                "tốc váy",
+                "dương vật",
+                "bộ phận sinh dục",
+                "cơ quan sinh dục",
+                # mại dâm, xâm hại
+                "mại dâm",
+                "bán dâm",
+                "gái gọi",
+                "hiếp dâm",
+                "cưỡng hiếp",
+                "cưỡng dâm",
+                "thủ dâm",
+                "kích dục",
+                "loạn luân",
+                "ấu dâm",
+                "dâm dục",
+                # tiếng Anh
+                "nude",
+                "nudes",
+                "nudity",
+                "naked",
+                "topless",
+                "sex",
+                "sextape",
+                "porn",
+                "porno",
+                "hentai",
+                "nsfw",
+                "xxx",
+                "jav",
+                "onlyfans",
+                "milf",
+                "erotic",
+                "upskirt",
+                "nipple",
+                "nipples",
+                "boobs",
+                "tits",
+                "pussy",
+                "blowjob",
+                "fuck",
+                "fucking",
             )
         },
         **{
@@ -259,11 +316,82 @@ SENSITIVE = Lexicon(
                 "gợi cảm",
                 "sexy",
                 "bốc lửa",
+                "nóng bỏng",
+                "áo tắm",
+                "đồ bơi",
+                "hớ hênh",
+                "khoe thân",
+                "hở bạo",
+                "vòng một",
+                "vòng ba",
+                "khoe ngực",
+                "khoe vòng một",
+                "ngực khủng",
+                "lộ clip",
+                "lingerie",
+                "underwear",
+                "swimsuit",
                 "xác chết",
                 "thi thể",
+                "chặt đầu",
             )
         },
     }
+)
+
+# Như SENSITIVE nhưng chỉ khớp khi gõ đúng dấu: dạng bỏ dấu trùng từ thường
+# ("cặc"/"các", "đéo"/"đeo", "dâm đãng"/"đảm đang", "hở hang"/"họ hàng", "máu me"/"màu mè").
+SENSITIVE_MARKED = Lexicon(
+    {
+        **{
+            k: "strict"
+            for k in (
+                # từ tục: bỏ dấu thì trùng từ thường (địt/đít, cặc/các, buồi/buổi, đụ/du, đĩ/đi)
+                "địt",
+                "đụ",
+                "lồn",
+                "buồi",
+                "cặc",
+                "đéo",
+                "đĩ",
+                "nứng",
+                "chịch",
+                # bỏ dấu thì trùng tên: "Thanh Lam tình tứ"
+                "làm tình",
+                # bỏ dấu thì trùng: như hoa, ấm hộ, mưa dầm, đảm đang, cởi trường...
+                "nhũ hoa",
+                "âm hộ",
+                "âm đạo",
+                "mua dâm",
+                "dâm ô",
+                "dâm đãng",
+                "trần truồng",
+                "cởi truồng",
+            )
+        },
+        **{
+            # bỏ dấu thì trùng: họ hàng, mất mẹ, màu mè, tự thi, vụ
+            k: "person"
+            for k in ("hở hang", "mát mẻ", "máu me", "tử thi", "vú")
+        },
+    },
+    exact=True,
+)
+
+# Teencode / viết tắt không dấu, so trên dạng đã bỏ dấu (đ -> d) và chữ thường (guard.py).
+# Chỉ các dạng không trùng từ thường: "dm", "vl", "cl" quá ngắn, dễ trùng tên viết tắt nên bỏ.
+SENSITIVE_PATTERNS = (
+    r"\bdj+t+\b",  # djt, đjt
+    r"\bdit\s*(?:me|cu|bo|con)\b",  # địt mẹ, đjt cụ (dạng bỏ dấu)
+    r"\bd[ckm]m+\b",  # dcm, đkm, dmm
+    r"\bc[lm]m\b",  # clm, cmm
+    r"\bv[ck]l+\b",  # vcl, vkl
+    r"\bclgt\b",
+    r"\bl[o0]z+\b",  # loz, lozz
+    r"\bf+u+c+k+\w*",  # fuck, fuckk, fucked
+    r"\bp[o0]rn\w*",  # pornhub
+    r"\bsex(?!y\b)\w+",  # sexting, sextoy (sex, sexy ở từ điển)
+    r"\bxx+x\b",
 )
 
 # Từ chức năng: không dùng làm cửa sổ so khớp mờ, không tính là tên người lạ.

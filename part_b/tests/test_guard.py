@@ -19,16 +19,60 @@ from imgsearch.retrieval.engine import SearchEngine
         "Hari Won ảnh nóng",
         "Ngọc Trinh 18+",
         "naked celebrity",
+        "hiep dam",  # cụm dài: không dấu vẫn chặn
+        "phim heo",
+        "địt",  # từ tục có dấu
+        "Ngọc Trinh địttt",  # chữ lặp
+        "cặc",
+        "đéo",
+        "djt me",  # teencode không dấu (regex)
+        "đcm",
+        "vcl Sơn Tùng",
+        "loz",
+        "fuckkk",
+        "pornhub",
     ],
 )
 def test_strict_terms_blocked_with_or_without_person(query):
     assert guard.check(query, has_person=False).blocked
 
 
-@pytest.mark.parametrize("query", ["Hồ Ngọc Hà bikini", "thi thể Trấn Thành", "Mỹ Tâm gợi cảm"])
+@pytest.mark.parametrize(
+    "query",
+    [
+        "Hồ Ngọc Hà bikini",
+        "thi thể Trấn Thành",
+        "Mỹ Tâm gợi cảm",
+        "Ngọc Trinh áo tắm",
+        "Hồ Ngọc Hà hở hang",  # chỉ khớp khi gõ đúng dấu ("hang" vốn không dấu)
+        "Hari Won mát mẻ",
+    ],
+)
 def test_borderline_terms_blocked_only_with_person(query):
     assert guard.check(query, has_person=True).blocked
     assert not guard.check(query, has_person=False).blocked  # "bikini" chủ đề chung: cho qua
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "cac ca si",  # bỏ dấu trùng "cặc"
+        "Trấn Thành deo kinh",  # "đéo"
+        "buoi bieu dien",  # "buồi"
+        "Mỹ Tâm đi du lịch",  # "đụ", "đĩ"
+        "dep nhu hoa",  # "nhũ hoa"
+        "Trấn Thành ho hang",  # "hở hang"
+        "Hồ Ngọc Hà mat me",  # "mát mẻ"
+        "Đàm Vĩnh Hưng màu mè",  # "máu me"
+        "mua dam",  # "mua dâm" / mưa dầm
+        "người phụ nữ đảm đang",  # "dâm đãng"
+        "NSND Thanh Lam tình tứ",  # "làm tình" khi bỏ dấu
+        "hoa dâm bụt",
+        "Krajan Dick",  # tên person trong dữ liệu
+    ],
+)
+def test_words_equal_to_sensitive_terms_without_marks_pass(query):
+    assert not guard.check(query, has_person=True).blocked
 
 
 @pytest.mark.parametrize(
