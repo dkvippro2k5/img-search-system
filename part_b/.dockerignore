@@ -16,3 +16,4 @@ tests
 bench/results
 web/node_modules
 web/dist
+.env.*

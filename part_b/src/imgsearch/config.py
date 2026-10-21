@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     index_version: str = "dev"
     # true: tải index/v{INDEX_VERSION}/ từ S3/MinIO về INDEX_DIR lúc khởi động (storage/s3.py)
     index_from_s3: bool = False
+    # true: tải models/{DENSE_MODEL}/ từ S3 về MODELS_DIR lúc khởi động (bản public không mount)
+    models_from_s3: bool = False
     # true (Docker): không có index thì /healthz trả 503 mãi, không chạy với index rỗng
     require_index: bool = False
 

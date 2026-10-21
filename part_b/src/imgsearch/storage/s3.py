@@ -5,6 +5,8 @@ Bucket private. Khóa: thumbs/{sha256[:2]}/{sha256}.webp, index/v{INDEX_VERSION}
 Đẩy index (+ thumbnail nếu có, scripts/make_thumbs.py) lên (service `init` của docker-compose,
 hoặc scripts/upload_s3.py):
     python -m imgsearch.storage.s3 --src ../data/index --thumbs ../data/thumbs --wait 60
+Bản public (R2, README mục 4): thêm --env-file .env.r2 --version people
+    --models ../models/siglip2-b32
 """
 
 import argparse
@@ -56,14 +58,29 @@ def presigned_thumb_url(settings: Settings, sha256: str, s3=None) -> str:
     )
 
 
+def model_prefix(name: str) -> str:
+    return f"models/{name}/"
+
+
 def download_index(settings: Settings, s3=None) -> int:
     """Tải index/v{INDEX_VERSION}/ về settings.index_path; bỏ qua file đã có cùng kích thước.
 
     Trả số file đã tải. Không có object nào dưới prefix -> FileNotFoundError.
     """
     s3 = s3 or client(settings)
-    prefix = index_prefix(settings.index_version)
-    dest = settings.index_path
+    return download_prefix(settings, index_prefix(settings.index_version), settings.index_path, s3)
+
+
+def download_model(settings: Settings, s3=None) -> int:
+    """Tải models/{DENSE_MODEL}/ (text.onnx, tokenizer.json, encoder.json) về MODELS_DIR, cho máy
+    chủ không mount sẵn thư mục model (bản public)."""
+    s3 = s3 or client(settings)
+    name = settings.dense_model
+    return download_prefix(settings, model_prefix(name), settings.models_dir / name, s3)
+
+
+def download_prefix(settings: Settings, prefix: str, dest: Path, s3) -> int:
+    """Tải các file phẳng dưới prefix về dest; bỏ qua file đã có cùng kích thước."""
     objects = []
     for page in s3.get_paginator("list_objects_v2").paginate(
         Bucket=settings.s3_bucket, Prefix=prefix
@@ -152,14 +169,38 @@ def upload_thumbs(settings: Settings, src: Path, s3=None, workers: int = 16) -> 
     return len(todo)
 
 
+def upload_model(settings: Settings, src: Path, s3=None) -> int:
+    """Đẩy thư mục model ONNX (text.onnx, tokenizer.json, encoder.json) lên models/{tên thư mục}/
+    cho MODELS_FROM_S3; bỏ qua object đã có cùng kích thước."""
+    s3 = s3 or client(settings)
+    prefix = model_prefix(Path(src).name)
+    have = {}
+    for page in s3.get_paginator("list_objects_v2").paginate(
+        Bucket=settings.s3_bucket, Prefix=prefix
+    ):
+        have.update({o["Key"]: o["Size"] for o in page.get("Contents", [])})
+    n = 0
+    for f in sorted(p for p in Path(src).iterdir() if p.is_file()):
+        if have.get(prefix + f.name) != f.stat().st_size:
+            s3.upload_file(str(f), settings.s3_bucket, prefix + f.name)
+            n += 1
+    return n
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Đẩy index/v{INDEX_VERSION}/ lên S3/MinIO/R2")
     ap.add_argument("--src", type=Path, default=Path("../data/index"))
     ap.add_argument("--wait", type=float, default=0, help="giây chờ S3 sẵn sàng")
     ap.add_argument("--thumbs", type=Path, default=None, help="thư mục thumbnail (make_thumbs.py)")
+    ap.add_argument(
+        "--models", type=Path, default=None, help="thư mục model, vd ../models/siglip2-b32"
+    )
+    ap.add_argument("--env-file", default=".env", help="vd .env.r2 để đẩy lên R2 thay vì MinIO")
+    ap.add_argument("--version", default=None, help="INDEX_VERSION (mặc định: theo env)")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    settings = Settings()
+    override = {"index_version": args.version} if args.version else {}
+    settings = Settings(_env_file=args.env_file, **override)
     ensure_bucket(settings, wait=args.wait)
     t = time.perf_counter()
     n = upload_index(settings, args.src)
@@ -174,6 +215,9 @@ def main(argv: list[str] | None = None) -> None:
         t = time.perf_counter()
         n = upload_thumbs(settings, args.thumbs)
         logging.info("Đã đẩy %d thumbnail (%.1f s)", n, time.perf_counter() - t)
+    if args.models is not None:
+        n = upload_model(settings, args.models)
+        logging.info("Đã đẩy %d file model %s", n, args.models.name)
 
 
 if __name__ == "__main__":

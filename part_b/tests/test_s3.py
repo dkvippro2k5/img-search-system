@@ -79,3 +79,55 @@ def test_require_index_keeps_engine_not_ready(tmp_path, monkeypatch):
     e2 = SearchEngine(Settings(_env_file=None, index_dir=tmp_path, index_version="missing"))
     e2.load()
     assert e2.ready and e2.store is None
+
+
+def test_download_model_to_models_dir(tmp_path):
+    src = tmp_path / "src"
+    src.mkdir()
+    for name in ("text.onnx", "tokenizer.json", "encoder.json"):
+        (src / name).write_bytes(b"x")
+    models = tmp_path / "models"
+    settings = Settings(_env_file=None, models_dir=models, dense_model="siglip2-b32")
+    fake = FakeS3(src, s3mod.model_prefix("siglip2-b32"))
+    assert s3mod.download_model(settings, s3=fake) == 3
+    assert (models / "siglip2-b32" / "text.onnx").exists()
+    assert s3mod.download_model(settings, s3=fake) == 0  # đã có, cùng kích thước
+
+
+def test_engine_model_download_failure_does_not_block_start(mini_index, tmp_path, monkeypatch):
+    def broken(settings):
+        raise ConnectionError("không có mạng")
+
+    monkeypatch.setattr(s3mod, "client", broken)
+    out, _ = mini_index
+    e = SearchEngine(
+        Settings(_env_file=None, index_dir=out, index_version="test", models_from_s3=True)
+    )
+    e.load()
+    assert e.ready and e.dense is None  # không có model: chạy BM25
+
+
+def test_upload_model_skips_existing(tmp_path):
+    src = tmp_path / "siglip2-b32"
+    src.mkdir()
+    (src / "text.onnx").write_bytes(b"changed")
+    (src / "encoder.json").write_bytes(b"{}")
+    prefix = s3mod.model_prefix("siglip2-b32")
+    have = [{"Key": prefix + "text.onnx", "Size": 2}, {"Key": prefix + "encoder.json", "Size": 2}]
+
+    class Fake:
+        uploads: list[str] = []
+
+        def get_paginator(self, name):
+            class Pager:
+                def paginate(self, Bucket, Prefix):  # noqa: N803 — tên tham số của boto3
+                    yield {"Contents": have}
+
+            return Pager()
+
+        def upload_file(self, filename, bucket, key):
+            self.uploads.append(key)
+
+    fake = Fake()
+    assert s3mod.upload_model(Settings(_env_file=None), src, s3=fake) == 1  # encoder.json đã có
+    assert fake.uploads == [prefix + "text.onnx"]

@@ -1,0 +1,56 @@
+# Bản public (nấc C1, docs/architecture.md mục 7): API chạy trên máy này, dữ liệu trên Cloudflare
+# R2, mở ra Internet bằng Cloudflare quick tunnel (URL *.trycloudflare.com, đổi mỗi lần chạy).
+#
+#   docker compose -f docker-compose.public.yml -p imgsearch-public up -d --build
+#   docker compose -f docker-compose.public.yml -p imgsearch-public logs cloudflared | grep trycloudflare
+#
+# Cần: .env có DEMO_PASSWORD (thiếu thì compose không chạy) + INDEX_VERSION + key mentor (tùy chọn);
+# .env.r2 có S3_ENDPOINT_URL / S3_BUCKET / key R2. R2 phải có sẵn index/v{ver}/, models/, thumbs/
+# (python -m imgsearch.storage.s3 --src ../data/index --thumbs ../data/thumbs, chạy với .env.r2).
+services:
+  api:
+    image: imgsearch:local
+    build: .
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.r2  # đè các biến S3_* của MinIO trong .env
+        required: true
+    environment:
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?Đặt DEMO_PASSWORD trong part_b/.env trước khi mở bản public}
+      INDEX_VERSION: ${INDEX_VERSION:-people}
+      # mọi thứ lấy từ R2, máy chạy không cần thư mục data/ hay models/
+      INDEX_FROM_S3: "true"
+      MODELS_FROM_S3: "true"
+      REQUIRE_INDEX: "true"
+      INDEX_DIR: /cache/index
+      MODELS_DIR: /cache/models
+      THUMBS_FROM_S3: "true"
+      LOCAL_IMAGES: "false"
+      # an toàn khi public: client không tắt được lọc an toàn, giới hạn /search theo IP
+      ALLOW_UNSAFE_SEARCH: "false"
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-30}
+      # như cấu hình đã benchmark (docker-compose.yml)
+      ONNX_THREADS: "4"
+      OPENBLAS_NUM_THREADS: "4"
+      OMP_NUM_THREADS: "4"
+      SEARCH_CONCURRENCY: "2"
+    ports:
+      - "127.0.0.1:8001:8000"  # chỉ để tự kiểm trên máy; người ngoài vào qua tunnel
+    volumes:
+      - public-cache:/cache
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4g
+
+  cloudflared:
+    image: cloudflare/cloudflared@sha256:0e56c13c7058fcef9c4f0e7d83372f82330548dbf8f8b366f3d8b506526d93b2
+    command: tunnel --no-autoupdate --url http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  public-cache:

@@ -99,7 +99,9 @@ class SearchEngine:
         person. Thiếu index: chạy với index rỗng, trừ khi REQUIRE_INDEX (khi đó không bao giờ
         `ready`, /healthz trả 503)."""
         if self.settings.index_from_s3:
-            self._download_index()
+            self._download("index", "download_index")
+        if self.settings.models_from_s3 and self.settings.dense_enabled:
+            self._download("model", "download_model")
         meta = self.settings.index_path / "meta.sqlite"
         if meta.exists():
             self.store = MetaStore(meta)
@@ -128,17 +130,15 @@ class SearchEngine:
             log.warning("Không thấy %s, chạy với index rỗng", meta)
         self.ready = True
 
-    def _download_index(self) -> None:
-        """Lỗi tải không chặn khởi động: dùng bản index đã có trên đĩa (nếu có)."""
-        from imgsearch.storage.s3 import download_index
-
+    def _download(self, what: str, fn: str) -> None:
+        """Lỗi tải không chặn khởi động: dùng bản đã có trên đĩa (nếu có)."""
         t = time.perf_counter()
         try:
-            n = download_index(self.settings)
+            n = getattr(s3, fn)(self.settings)
         except Exception as e:  # noqa: BLE001 — mạng, quyền, bucket rỗng: đều quay về bản local
-            log.error("Không tải được index từ S3 (%s); dùng bản trên đĩa nếu có", e)
+            log.error("Không tải được %s từ S3 (%s); dùng bản trên đĩa nếu có", what, e)
             return
-        log.info("Tải %d file index từ S3 trong %.1f s", n, time.perf_counter() - t)
+        log.info("Tải %d file %s từ S3 trong %.1f s", n, what, time.perf_counter() - t)
 
     def _load_dense(self) -> DenseIndex | None:
         """Lỗi ở đây không chặn khởi động: log cảnh báo và chạy chỉ BM25."""
