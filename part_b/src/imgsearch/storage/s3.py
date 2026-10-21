@@ -20,6 +20,7 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from imgsearch.config import Settings
+from imgsearch.data.thumbs import LIST_FILE as THUMB_LIST
 
 
 def client(settings: Settings, public: bool = False):
@@ -124,21 +125,43 @@ def ensure_bucket(settings: Settings, s3=None, wait: float = 0) -> None:
             time.sleep(1)
 
 
-def upload_index(settings: Settings, src: Path, s3=None) -> int:
-    """Đẩy {src}/v{INDEX_VERSION}/* lên index/v{ver}/; bỏ qua object đã có cùng kích thước."""
-    s3 = s3 or client(settings)
-    folder = Path(src) / f"v{settings.index_version}"
-    if not (folder / "meta.sqlite").exists():
-        raise FileNotFoundError(f"{folder} không có meta.sqlite")
-    prefix = index_prefix(settings.index_version)
+def _sizes(settings: Settings, s3, prefix: str) -> dict[str, int]:
+    """{khóa: kích thước} của mọi object dưới prefix."""
     have = {}
     for page in s3.get_paginator("list_objects_v2").paginate(
         Bucket=settings.s3_bucket, Prefix=prefix
     ):
         have.update({o["Key"]: o["Size"] for o in page.get("Contents", [])})
+    return have
+
+
+def upload_index(settings: Settings, src: Path, s3=None) -> int:
+    """Đẩy {src}/v{INDEX_VERSION}/* lên index/v{ver}/; bỏ qua object đã có cùng kích thước.
+
+    thumbs.txt chỉ giữ ảnh đã có thumbnail trên S3: engine ký URL cho mọi id trong danh sách,
+    không kiểm tra object, nên id chưa đẩy lên sẽ thành ô ảnh hỏng thay vì hotlink.
+    """
+    s3 = s3 or client(settings)
+    folder = Path(src) / f"v{settings.index_version}"
+    if not (folder / "meta.sqlite").exists():
+        raise FileNotFoundError(f"{folder} không có meta.sqlite")
+    prefix = index_prefix(settings.index_version)
+    have = _sizes(settings, s3, prefix)
     n = 0
     for f in sorted(p for p in folder.iterdir() if p.is_file()):
         key = prefix + f.name
+        if f.name == THUMB_LIST:
+            on_s3 = _sizes(settings, s3, "thumbs/")
+            ids = f.read_text(encoding="utf-8").split()
+            kept = [i for i in ids if thumb_key(i) in on_s3]
+            body = "".join(f"{i}\n" for i in kept).encode()
+            if len(kept) < len(ids):
+                missing = len(ids) - len(kept)
+                logging.warning("thumbs.txt: bỏ %d id chưa có thumbnail trên S3", missing)
+            if have.get(key) != len(body):
+                s3.put_object(Bucket=settings.s3_bucket, Key=key, Body=body)
+                n += 1
+            continue
         if have.get(key) == f.stat().st_size:
             continue
         s3.upload_file(str(f), settings.s3_bucket, key)
@@ -149,11 +172,7 @@ def upload_index(settings: Settings, src: Path, s3=None) -> int:
 def upload_thumbs(settings: Settings, src: Path, s3=None, workers: int = 16) -> int:
     """Đẩy {src}/{id[:2]}/{id}.webp lên thumbs/...; bỏ qua object đã có cùng kích thước."""
     s3 = s3 or client(settings)
-    have = {}
-    for page in s3.get_paginator("list_objects_v2").paginate(
-        Bucket=settings.s3_bucket, Prefix="thumbs/"
-    ):
-        have.update({o["Key"]: o["Size"] for o in page.get("Contents", [])})
+    have = _sizes(settings, s3, "thumbs/")
     todo = [
         (f, thumb_key(f.stem))
         for f in sorted(Path(src).glob("*/*.webp"))
@@ -174,11 +193,7 @@ def upload_model(settings: Settings, src: Path, s3=None) -> int:
     cho MODELS_FROM_S3; bỏ qua object đã có cùng kích thước."""
     s3 = s3 or client(settings)
     prefix = model_prefix(Path(src).name)
-    have = {}
-    for page in s3.get_paginator("list_objects_v2").paginate(
-        Bucket=settings.s3_bucket, Prefix=prefix
-    ):
-        have.update({o["Key"]: o["Size"] for o in page.get("Contents", [])})
+    have = _sizes(settings, s3, prefix)
     n = 0
     for f in sorted(p for p in Path(src).iterdir() if p.is_file()):
         if have.get(prefix + f.name) != f.stat().st_size:
@@ -202,6 +217,15 @@ def main(argv: list[str] | None = None) -> None:
     override = {"index_version": args.version} if args.version else {}
     settings = Settings(_env_file=args.env_file, **override)
     ensure_bucket(settings, wait=args.wait)
+    # Index đẩy sau cùng: thumbs.txt chỉ lên khi thumbnail đã lên; thumbnail lỗi giữa chừng thì
+    # dừng, API vẫn dùng index cũ (còn khớp với thumbnail đang có).
+    if args.thumbs is not None and args.thumbs.is_dir():
+        t = time.perf_counter()
+        n = upload_thumbs(settings, args.thumbs)
+        logging.info("Đã đẩy %d thumbnail (%.1f s)", n, time.perf_counter() - t)
+    if args.models is not None:
+        n = upload_model(settings, args.models)
+        logging.info("Đã đẩy %d file model %s", n, args.models.name)
     t = time.perf_counter()
     n = upload_index(settings, args.src)
     logging.info(
@@ -211,13 +235,6 @@ def main(argv: list[str] | None = None) -> None:
         settings.s3_bucket,
         time.perf_counter() - t,
     )
-    if args.thumbs is not None and args.thumbs.is_dir():
-        t = time.perf_counter()
-        n = upload_thumbs(settings, args.thumbs)
-        logging.info("Đã đẩy %d thumbnail (%.1f s)", n, time.perf_counter() - t)
-    if args.models is not None:
-        n = upload_model(settings, args.models)
-        logging.info("Đã đẩy %d file model %s", n, args.models.name)
 
 
 if __name__ == "__main__":

@@ -47,7 +47,10 @@ class FakeS3:
         return Pager()
 
     def upload_file(self, filename, bucket, key, ExtraArgs=None):  # noqa: N803
-        self.uploads.append((key, ExtraArgs["ContentType"]))
+        self.uploads.append((key, (ExtraArgs or {}).get("ContentType")))
+
+    def put_object(self, Bucket, Key, Body):  # noqa: N803
+        self.uploads.append((Key, Body))
 
 
 def test_upload_thumbs_skips_existing_same_size(tmp_path):
@@ -59,6 +62,17 @@ def test_upload_thumbs_skips_existing_same_size(tmp_path):
     settings = Settings(_env_file=None, s3_bucket="b")
     assert s3mod.upload_thumbs(settings, tmp_path, s3=fake) == 1
     assert fake.uploads == [(s3mod.thumb_key(DEN2), "image/webp")]
+
+
+def test_upload_index_lists_only_thumbs_on_s3(tmp_path):
+    folder = tmp_path / "vtest"
+    folder.mkdir()
+    (folder / "meta.sqlite").write_bytes(b"db")
+    thumbs.write_list(folder / thumbs.LIST_FILE, [DEN1, DEN2])
+    fake = FakeS3({s3mod.thumb_key(DEN1): 4})  # DEN2 chưa đẩy thumbnail (lỗi giữa chừng)
+    settings = Settings(_env_file=None, s3_bucket="b", index_version="test")
+    assert s3mod.upload_index(settings, tmp_path, s3=fake) == 2
+    assert ("index/vtest/thumbs.txt", f"{DEN1}\n".encode()) in fake.uploads
 
 
 def test_presign_uses_public_endpoint():
