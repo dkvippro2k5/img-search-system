@@ -1,6 +1,6 @@
 # Tài liệu kỹ thuật: truy xuất ảnh người nổi tiếng Việt Nam (Phần B)
 
-Tài liệu này mô tả hệ thống truy xuất ảnh bằng ngôn ngữ tự nhiên (Phần B của capstone): kiến trúc, các quyết định thiết kế kèm số đo, kết quả đánh giá, hiệu năng, triển khai và hạn chế. Phần A (kiểm duyệt ảnh) có tài liệu riêng ở [part_a/](../part_a/README.md).
+Tài liệu này mô tả hệ thống truy xuất ảnh bằng ngôn ngữ tự nhiên (Phần B của capstone): kiến trúc, các quyết định thiết kế kèm số đo, kết quả đánh giá, hiệu năng, triển khai và hạn chế. Phần A (kiểm duyệt ảnh) là future work, không làm trong capstone; hạn chế của Phần B do thiếu Phần A và cách nối ở [part_a/](../part_a/README.md).
 
 - Kế hoạch và phương án ban đầu: [capstone/PLAN.md](../capstone/PLAN.md). Kịch bản người dùng có mã (E2, M1, H3…): [capstone/SCENARIOS.md](../capstone/SCENARIOS.md).
 - Cách chạy lại từ đầu: [part_b/README.md](../part_b/README.md).
@@ -225,13 +225,13 @@ Chi tiết ở `reports/perf.md`.
 
 - **Docker Compose** gồm 3 service:
   - `minio`: object storage;
-  - `init`: dùng chính image API, tạo bucket private và đẩy `index/v{ver}/` + thumbnail, bỏ qua file đã có;
+  - `init`: dùng chính image API, tạo bucket private và đẩy thumbnail rồi mới đẩy `index/v{ver}/`, bỏ qua file đã có. `thumbs.txt` chỉ liệt kê id đã có thumbnail trên bucket, nên đẩy dở dang không tạo ô ảnh hỏng;
   - `api`: tải index từ MinIO về volume cache lúc khởi động, rồi nạp.
-- **Thumbnail** (PLAN 7.4): WebP 320 px cho 89.305 ảnh có file nguồn, 0,719 GB, 7,9 KB/ảnh [Đã đo]. Lưu ở `thumbs/{id[:2]}/{id}.webp` trên bucket private; trình duyệt tải bằng presigned URL hạn 6 giờ (`PRESIGN_TTL_SECONDS`; cùng URL trong nửa hạn để trình duyệt cache được), ký với địa chỉ trình duyệt tới được (`S3_PUBLIC_ENDPOINT_URL`). Ảnh không có thumbnail (~0,8%) vẫn hotlink. Đo trên 196 ảnh đầu của 12 truy vấn demo: 194 hiển thị được, 2 hỏng là hotlink tới link đã chết [Đã đo, compose local]; trước đó hotlink toàn bộ hỏng 38/196.
-- **Bản public** (`docker-compose.public.yml`): máy chủ không cần `data/` hay `models/`. API tải index, model ONNX và danh sách thumbnail từ **Cloudflare R2** (bucket private, ~2,6 GB, dưới mức miễn phí 10 GB) lúc khởi động; thumbnail đi thẳng từ R2 tới trình duyệt. Mở ra Internet bằng Cloudflare quick tunnel từ chính máy đã benchmark. Không dùng HF Spaces: Docker Space cần gói trả phí (kiểm 21/10/2026).
+- **Thumbnail** (PLAN 7.4): WebP 320 px cho 89.305 ảnh có file nguồn, 0,719 GB, 7,9 KB/ảnh [Đã đo]. Lưu ở `thumbs/{id[:2]}/{id}.webp` trên bucket private; trình duyệt tải bằng presigned URL hạn 6 giờ (`PRESIGN_TTL_SECONDS`; cùng URL trong nửa hạn để trình duyệt cache được), ký với địa chỉ trình duyệt tới được (`S3_PUBLIC_ENDPOINT_URL`). Ảnh không có thumbnail (~0,8%) vẫn hotlink. Ô xem ảnh lớn dùng ảnh gốc (`image_url`), lỗi thì quay về thumbnail. Đo trên 196 ảnh đầu của 12 truy vấn demo: 194 hiển thị được, 2 hỏng là hotlink tới link đã chết [Đã đo, compose local]; trước đó hotlink toàn bộ hỏng 38/196.
+- **Bản public** (`docker-compose.public.yml`): máy chủ không cần `data/` hay `models/`. API tải index, model ONNX và danh sách thumbnail từ **Cloudflare R2** (bucket private, ~2,6 GB, dưới mức miễn phí 10 GB) lúc khởi động; thumbnail đi thẳng từ R2 tới trình duyệt. Lần chạy đầu (volume cache trống) tải khoảng 1,5–2 GB trước khi API nhận request [Ước tính], nên healthcheck của bản public có `start_period` 30 phút. Mở ra Internet bằng Cloudflare quick tunnel từ chính máy đã benchmark. Không dùng HF Spaces: Docker Space cần gói trả phí (kiểm 21/10/2026).
 - **An toàn khi public** (X2, X4):
   - mật khẩu dùng chung (`DEMO_PASSWORD`, HTTP Basic, mọi đường dẫn trừ `/healthz`; thiếu thì compose public không chạy);
-  - giới hạn 30 truy vấn/phút mỗi IP;
+  - giới hạn 30 truy vấn/phút mỗi IP; gửi sai mật khẩu quá 10 lần/phút (`AUTH_FAIL_PER_MINUTE`) thì IP đó nhận 429 trong một phút, kể cả khi thử đúng, để không dò được mật khẩu;
   - client không tắt được lọc an toàn (`ALLOW_UNSAFE_SEARCH=false`);
   - truy vấn tìm ảnh nhạy cảm của người thật bị từ chối và ghi log (`retrieval/guard.py`): từ khóa rõ ràng luôn chặn; bikini, nội y, gợi cảm, thi thể chỉ chặn khi có tên người; gỡ các kiểu lách "k.h.ỏ.a t.h.â.n", "s e x", "nud3". Dev eval không đổi sau khi thêm (80/82, nDCG@10 0,94) [Đã đo];
   - nhãn nhóm ghi mô tả là tiêu chí xếp hạng ("Phạm Nhật Vượng · xếp theo “bị bắt”") kèm dòng "không xác nhận sự kiện", để không lặp lại tiền đề sai.

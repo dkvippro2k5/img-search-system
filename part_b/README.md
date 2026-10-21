@@ -98,7 +98,8 @@ API chạy trên máy này (cùng cấu hình 4 CPU / 4 GB đã benchmark). Inde
 #    (token "Object Read & Write" chỉ cho bucket đó). part_b/.env: DEMO_PASSWORD=...
 # 2. Đẩy index + thumbnail + model lên R2 (bỏ qua file đã có)
 python -X utf8 -m imgsearch.storage.s3 --env-file .env.r2 --version people --src ../data/index --thumbs ../data/thumbs --models ../models/siglip2-b32
-# 3. Chạy api (tải mọi thứ từ R2) + cloudflared; lấy URL public trong log
+# 3. Chạy api (tải mọi thứ từ R2) + cloudflared; lấy URL public trong log.
+#    Lần đầu (volume trống) api tải ~1,5–2 GB rồi mới healthy: lệnh up chờ vài phút là bình thường.
 docker compose -f docker-compose.public.yml -p imgsearch-public up -d --build
 docker compose -f docker-compose.public.yml -p imgsearch-public logs cloudflared | grep trycloudflare
 # 4. Tắt khi xong buổi demo
@@ -108,8 +109,9 @@ docker compose -f docker-compose.public.yml -p imgsearch-public down
 An toàn khi public (SCENARIOS X2, X4):
 - `DEMO_PASSWORD` bắt buộc (thiếu thì compose không chạy); hỏi mật khẩu mọi đường dẫn trừ `/healthz`.
 - `RATE_LIMIT_PER_MINUTE=30` truy vấn mỗi IP (IP thật lấy từ header `CF-Connecting-IP`).
+- `AUTH_FAIL_PER_MINUTE=10`: sai mật khẩu quá số lần này trong một phút thì IP đó nhận 429 trong một phút (chống dò mật khẩu).
 - `ALLOW_UNSAFE_SEARCH=false`: client không tắt được lọc an toàn.
-- Truy vấn tìm ảnh nhạy cảm của người thật bị từ chối và ghi log (`retrieval/guard.py`, từ vựng `lexicon.SENSITIVE`). Đây chỉ là lớp phụ ở mức truy vấn; lọc ảnh nhạy cảm thật sự cần điểm của Phần A.
+- Truy vấn tìm ảnh nhạy cảm của người thật bị từ chối và ghi log (`retrieval/guard.py`, từ vựng `lexicon.SENSITIVE`). Đây chỉ là lớp phụ ở mức truy vấn; lọc ảnh nhạy cảm thật sự cần điểm kiểm duyệt của Phần A (future work, [../part_a/README.md](../part_a/README.md)).
 - URL tunnel đổi mỗi lần chạy và chỉ sống khi máy này bật.
 
 ## 5. Đánh giá và benchmark
@@ -136,8 +138,8 @@ Mọi tham số nằm trong [src/imgsearch/config.py](src/imgsearch/config.py) v
 - `SEARCH_CONCURRENCY`: số truy vấn tính toán đồng thời.
 - `QUERY_CACHE_SIZE`: cache vector truy vấn.
 - `SAFE_SEARCH_DEFAULT`, `ALLOW_UNSAFE_SEARCH`, `NSFW_BLOCK_SCORE`: lọc an toàn.
-- `DEMO_PASSWORD`, `RATE_LIMIT_PER_MINUTE`: bản public.
-- `THUMBS_FROM_S3`, `S3_PUBLIC_ENDPOINT_URL`, `LOCAL_IMAGES`: nguồn ảnh hiển thị.
+- `DEMO_PASSWORD`, `RATE_LIMIT_PER_MINUTE`, `AUTH_FAIL_PER_MINUTE`: bản public.
+- `THUMBS_FROM_S3`, `S3_PUBLIC_ENDPOINT_URL`, `PRESIGN_TTL_SECONDS`, `LOCAL_IMAGES`: nguồn ảnh hiển thị.
 - `INDEX_FROM_S3`, `MODELS_FROM_S3`: tải index / model từ S3 lúc khởi động.
 - `CANDIDATE_POOL`, `PER_PERSON_CAP`.
 
