@@ -70,6 +70,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 14px 16px 60px; }
 /* --- thông báo, bằng chứng --- */
 .message { margin: 10px 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-soft); color: var(--fg);
   border-left: 4px solid var(--warn); }
+.note { margin: 8px 0; font-size: 13px; color: var(--muted); }
 .suggestion { border: 0; background: none; color: var(--accent); text-decoration: underline; padding: 0; }
 .chain { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin: 10px 0; }
 .chain h2 { font-size: 14px; margin: 0 0 8px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }

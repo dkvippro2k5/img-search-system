@@ -47,6 +47,7 @@ interface Health {
   n_persons?: number;
   dense?: string | null;
   text_dense?: string | null;
+  allow_unsafe_search?: boolean;
 }
 
 const KIND_LABELS: Record<GroupKind, string> = {
@@ -60,6 +61,7 @@ const QUERY_TYPES: Record<string, string> = {
   single: "Một ý định",
   multi_intent: "Nhiều ý định",
   multi_hop: "Quan hệ (multi-hop)",
+  refused: "Bị từ chối",
 };
 
 // Truy vấn mẫu cho demo, theo mã kịch bản (capstone/SCENARIOS.md).
@@ -120,6 +122,8 @@ async function loadInfo(): Promise<void> {
       return;
     }
     const channels = ["BM25", h.dense && `ảnh ${h.dense}`, h.text_dense && `văn bản ${h.text_dense}`];
+    // Server không cho tắt lọc an toàn: ẩn công tắc thay vì để nó không có tác dụng.
+    if (!h.allow_unsafe_search) safe.closest("label")?.setAttribute("hidden", "");
     info.textContent = `${fmt(h.n_images ?? 0)} ảnh · ${fmt(h.n_persons ?? 0)} người · kênh: ${channels.filter(Boolean).join(", ")}`;
   } catch {
     info.textContent = "Không kết nối được máy chủ";
@@ -293,6 +297,11 @@ function render(res: SearchResponse, timing: [string, number][]): void {
 
   renderSummary(res, timing);
   renderMessages(res);
+  // Nhóm có mô tả gồm mọi ảnh của người đó, mô tả chỉ để xếp hạng: nói rõ để "X bị bắt" không
+  // bị hiểu là hệ thống xác nhận tin đó.
+  if (res.groups.some((g) => g.label.includes("xếp theo"))) {
+    messagesEl.append(el("p", "Ảnh được xếp theo độ gần với mô tả trong truy vấn; hệ thống không xác nhận sự kiện được nhắc tới.", "note"));
+  }
   renderReasoning(res);
 
   res.groups.forEach((group, i) => {
@@ -323,7 +332,10 @@ async function search(query: string): Promise<void> {
       body: JSON.stringify({ query, safe_search: safe.checked }),
     });
     if (!resp.ok) {
-      statusEl.textContent = resp.status === 422 ? "Truy vấn không hợp lệ (rỗng hoặc quá dài)" : `Lỗi ${resp.status}`;
+      statusEl.textContent =
+        resp.status === 422 ? "Truy vấn không hợp lệ (rỗng hoặc quá dài)"
+        : resp.status === 429 ? "Bạn tìm quá nhanh, thử lại sau ít giây."
+        : `Lỗi ${resp.status}`;
       return;
     }
     render((await resp.json()) as SearchResponse, parseTiming(resp.headers.get("Server-Timing")));
