@@ -55,7 +55,7 @@ def test_E4_E7_fragmented_entities_one_group_no_duplicates(engine):
 
 def test_S1_person_with_context_ranks_context_first_and_keeps_rest(engine):
     g = run(engine, "Mỹ Tâm trên sân khấu").groups[0]
-    assert g.label == "Mỹ Tâm — trên sân khấu"
+    assert g.label == "Mỹ Tâm · xếp theo “trên sân khấu”"
     assert ids(g)[0] == img("mt1")
     assert set(ids(g)) == {img("mt1"), img("mt2"), img("mt3"), img("mt4")}  # chỉ ảnh Mỹ Tâm
 

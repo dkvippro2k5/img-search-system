@@ -221,6 +221,51 @@ COUNT_NOUNS = Lexicon(
     }
 )
 
+# Truy vấn tìm ảnh nhạy cảm của người thật (X2): từ chối + ghi log (retrieval/guard.py).
+# "strict": luôn chặn. "person": chỉ chặn khi truy vấn có tên người (ảnh loại này có thể công khai,
+# nhưng truy vấn nhắm vào cơ thể / cái chết của một người thật). Chốt với người dùng 21/10/2026.
+SENSITIVE = Lexicon(
+    {
+        **{
+            k: "strict"
+            for k in (
+                "khỏa thân",
+                "lõa thể",
+                "lõa lồ",
+                "không mặc gì",
+                "nude",
+                "naked",
+                "sex",
+                "porn",
+                "khiêu dâm",
+                "đồi trụy",
+                "tình dục",
+                "làm tình",
+                "ảnh nóng",
+                "clip nóng",
+                "cảnh nóng",
+                "video nóng",
+                "lộ hàng",
+                "lộ ngực",
+                "lộ vòng một",
+            )
+        },
+        **{
+            k: "person"
+            for k in (
+                "bikini",
+                "nội y",
+                "đồ lót",
+                "gợi cảm",
+                "sexy",
+                "bốc lửa",
+                "xác chết",
+                "thi thể",
+            )
+        },
+    }
+)
+
 # Từ chức năng: không dùng làm cửa sổ so khớp mờ, không tính là tên người lạ.
 STOPWORDS = {
     fold(w)

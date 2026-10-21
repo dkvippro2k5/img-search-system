@@ -20,8 +20,8 @@ import numpy as np
 
 from imgsearch.api.schemas import EvidenceStep, ImageHit, ResultGroup, SearchRequest, SearchResponse
 from imgsearch.config import Settings
+from imgsearch.retrieval import guard, multi_hop, multi_intent
 from imgsearch.retrieval import lexicon as lx
-from imgsearch.retrieval import multi_hop, multi_intent
 from imgsearch.retrieval.aliases import AliasIndex
 from imgsearch.retrieval.dense import DenseIndex, OnnxTextEncoder, TextEncoder, min_cosine
 from imgsearch.retrieval.fusion import rrf
@@ -43,6 +43,9 @@ Ranked = list[tuple[str, float]]
 
 MSG_NO_INDEX = "Chưa nạp index, hệ thống chưa có dữ liệu để tìm."
 MSG_NO_RESULT = "Không tìm thấy ảnh phù hợp."
+MSG_REFUSED = (
+    "Hệ thống không hỗ trợ tìm ảnh nhạy cảm của người thật (khỏa thân, ảnh nóng, nội y, thi thể…)."
+)
 MSG_UNSUPPORTED = {
     "negation": "Truy vấn phủ định (“không …”) chưa được hỗ trợ; kết quả có thể vẫn chứa "
     "điều bạn muốn loại trừ.",
@@ -224,6 +227,13 @@ class SearchEngine:
         t = time.perf_counter()
         parsed = self.parser.parse(req.query)
         timings["parse"] = (time.perf_counter() - t) * 1000
+        blocked = guard.check(req.query, has_person=bool(parsed.mentions))
+        if blocked.blocked:  # X2: không truy xuất, không gọi mentor
+            log.warning("Từ chối truy vấn nhạy cảm (X2) %s: %r", blocked.terms, req.query)
+            refused = SearchResponse(
+                query=req.query, query_type="refused", groups=[], messages=[MSG_REFUSED]
+            )
+            return refused, timings
 
         t = time.perf_counter()
         self._prefetch_text(parsed)
@@ -416,7 +426,9 @@ class SearchEngine:
         if self.text_dense is None:
             return
         try:
-            self._prefetch_text(self.parser.parse(query))
+            parsed = self.parser.parse(query)
+            if not guard.check(query, has_person=bool(parsed.mentions)).blocked:
+                self._prefetch_text(parsed)
         except Exception as e:  # noqa: BLE001 — chỉ là tối ưu, lỗi thì search() tự gọi
             log.warning("prefetch lỗi (%s)", e)
 
@@ -540,12 +552,14 @@ class SearchEngine:
 
     def _intent_label(self, intent: Intent) -> str:
         """Tên chuẩn của người + phần mô tả còn lại: "den vau" -> "Đen Vâu",
-        "Mỹ Tâm trên sân khấu" -> "Mỹ Tâm — trên sân khấu"."""
+        "Mỹ Tâm trên sân khấu" -> "Mỹ Tâm · xếp theo “trên sân khấu”". Mô tả ghi là tiêu chí xếp
+        hạng, không ghép thẳng vào tên: nhóm gồm mọi ảnh của người đó (S1), nên "Phạm Nhật Vượng —
+        bị bắt" sẽ đọc như hệ thống xác nhận một tin chưa có thật."""
         if not intent.person_ids:
             return intent.text
         names = " / ".join(self._name(p) for p in intent.person_ids)
         rest = _residual(intent.text, intent.mentions)
-        return f"{names} — {rest}" if rest else names
+        return f"{names} · xếp theo “{rest}”" if rest else names
 
     def _evidence(self, edge: multi_hop.Edge) -> EvidenceStep:
         return EvidenceStep(
