@@ -36,8 +36,8 @@ Mỗi dòng:
 | `queries.v1.jsonl` | test set đầy đủ = sinh tự động + `manual.v1.jsonl` | `scripts/make_testset.py` |
 | `pool.v1.jsonl` | ảnh cần chấm cho truy vấn `gt: "pool"` | `scripts/make_pool.py` |
 | `labels.v1.jsonl` | nhãn `{qid, image_id, grade}`; dòng sau ghi đè dòng trước | `scripts/label_server.py` |
-| `queries.example.jsonl` | ví dụ định dạng cũ | tay |
-| `bench_queries.json` | truy vấn cho k6 (50% single, 30% multi-intent, 20% multi-hop) | tay |
+| `bench_queries.json` | truy vấn cho k6 (50% single, 30% multi-intent, 20% multi-hop) | `scripts/make_testset.py` |
+| `relations_check.v1.md` | kiểm tay 27 cạnh quan hệ dùng trong test set multi-hop (20/10/2026) | tay |
 
 Không sửa tay `queries.v1.jsonl`: sửa `manual.v1.jsonl` hoặc `imgsearch/eval/testgen.py` rồi sinh lại.
 

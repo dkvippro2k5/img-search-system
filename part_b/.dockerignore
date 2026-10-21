@@ -9,7 +9,6 @@ venv
 data
 models
 reports
-notebooks
 capstone
 docs
 tests

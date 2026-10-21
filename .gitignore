@@ -22,7 +22,6 @@
 
 # Báo cáo sinh tự động (giữ thư mục)
 /reports/*
-!/reports/.gitkeep
 !/reports/README.md
 !/reports/eval.md
 !/reports/perf.md
