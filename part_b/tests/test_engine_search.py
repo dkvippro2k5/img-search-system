@@ -256,7 +256,7 @@ def test_engine_without_index_answers_with_message(tmp_path):
     assert resp.groups == [] and resp.messages == [MSG_NO_INDEX]
 
 
-def test_thumbs_from_s3_are_presigned(mini_index):
+def test_thumbs_from_s3_without_list_falls_back_to_hotlink(mini_index):
     out, _ = mini_index
     e = SearchEngine(
         Settings(
@@ -269,6 +269,6 @@ def test_thumbs_from_s3_are_presigned(mini_index):
         )
     )
     e.load()
+    # index mini không có thumbs.txt (chưa chạy make_thumbs.py): không presign ảnh không có trên S3
     hit = e.search(SearchRequest(query="Đen Vâu"))[0].groups[0].hits[0]
-    assert f"thumbs/{hit.image_id[:2]}/{hit.image_id}.webp" in hit.thumb_url
-    assert "Signature" in hit.thumb_url
+    assert hit.thumb_url.startswith("https://example.com/")

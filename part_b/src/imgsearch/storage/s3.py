@@ -2,28 +2,40 @@
 
 Bucket private. Khóa: thumbs/{sha256[:2]}/{sha256}.webp, index/v{INDEX_VERSION}/...
 
-Đẩy index lên (service `init` của docker-compose, hoặc scripts/upload_s3.py):
-    python -m imgsearch.storage.s3 --src ../data/index --wait 60
+Đẩy index (+ thumbnail nếu có, scripts/make_thumbs.py) lên (service `init` của docker-compose,
+hoặc scripts/upload_s3.py):
+    python -m imgsearch.storage.s3 --src ../data/index --thumbs ../data/thumbs --wait 60
 """
 
 import argparse
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from imgsearch.config import Settings
 
 
-def client(settings: Settings):
+def client(settings: Settings, public: bool = False):
+    """public=True: client để ký presigned URL cho trình duyệt. Trong compose, API gọi MinIO qua
+    http://minio:9000 nhưng trình duyệt chỉ tới được S3_PUBLIC_ENDPOINT_URL (localhost:9000);
+    chữ ký gắn với host nên phải ký bằng đúng địa chỉ trình duyệt dùng."""
+    endpoint = settings.s3_endpoint_url
+    if public and settings.s3_public_endpoint_url:
+        endpoint = settings.s3_public_endpoint_url
     return boto3.client(
         "s3",
-        endpoint_url=settings.s3_endpoint_url,
+        endpoint_url=endpoint,
         aws_access_key_id=settings.s3_access_key_id,
         aws_secret_access_key=settings.s3_secret_access_key,
         region_name=settings.s3_region,
+        # SigV4 cho mọi endpoint: với us-east-1 boto3 mặc định ký presign kiểu SigV2, R2 không nhận.
+        # Pool 32 >= số luồng upload_thumbs (mặc định 10: "Connection pool is full", chậm hẳn).
+        config=Config(signature_version="s3v4", max_pool_connections=32),
     )
 
 
@@ -117,10 +129,34 @@ def upload_index(settings: Settings, src: Path, s3=None) -> int:
     return n
 
 
+def upload_thumbs(settings: Settings, src: Path, s3=None, workers: int = 16) -> int:
+    """Đẩy {src}/{id[:2]}/{id}.webp lên thumbs/...; bỏ qua object đã có cùng kích thước."""
+    s3 = s3 or client(settings)
+    have = {}
+    for page in s3.get_paginator("list_objects_v2").paginate(
+        Bucket=settings.s3_bucket, Prefix="thumbs/"
+    ):
+        have.update({o["Key"]: o["Size"] for o in page.get("Contents", [])})
+    todo = [
+        (f, thumb_key(f.stem))
+        for f in sorted(Path(src).glob("*/*.webp"))
+        if have.get(thumb_key(f.stem)) != f.stat().st_size
+    ]
+    extra = {"ContentType": "image/webp", "CacheControl": "public, max-age=86400"}
+
+    def one(item: tuple[Path, str]) -> None:
+        s3.upload_file(str(item[0]), settings.s3_bucket, item[1], ExtraArgs=extra)
+
+    with ThreadPoolExecutor(workers) as ex:
+        list(ex.map(one, todo))
+    return len(todo)
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Đẩy index/v{INDEX_VERSION}/ lên S3/MinIO/R2")
     ap.add_argument("--src", type=Path, default=Path("../data/index"))
     ap.add_argument("--wait", type=float, default=0, help="giây chờ S3 sẵn sàng")
+    ap.add_argument("--thumbs", type=Path, default=None, help="thư mục thumbnail (make_thumbs.py)")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     settings = Settings()
@@ -134,6 +170,10 @@ def main(argv: list[str] | None = None) -> None:
         settings.s3_bucket,
         time.perf_counter() - t,
     )
+    if args.thumbs is not None and args.thumbs.is_dir():
+        t = time.perf_counter()
+        n = upload_thumbs(settings, args.thumbs)
+        logging.info("Đã đẩy %d thumbnail (%.1f s)", n, time.perf_counter() - t)
 
 
 if __name__ == "__main__":

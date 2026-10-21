@@ -15,8 +15,9 @@ services:
     volumes:
       - minio-data:/data
 
-  # Tạo bucket private và đẩy index/v{INDEX_VERSION}/ lên MinIO (chạy một lần, bỏ qua file
-  # đã có). Dùng chính image của api (boto3), không cần minio/mc.
+  # Tạo bucket private và đẩy index/v{INDEX_VERSION}/ + thumbnail (nếu đã chạy
+  # scripts/make_thumbs.py) lên MinIO (chạy một lần, bỏ qua file đã có). Dùng chính image của
+  # api (boto3), không cần minio/mc.
   init:
     image: imgsearch:local
     build: .
@@ -30,7 +31,10 @@ services:
       INDEX_VERSION: ${INDEX_VERSION:-dev}
     volumes:
       - ../data/index:/data/index:ro
-    command: python -m imgsearch.storage.s3 --src /data/index --wait 60
+      - ../data/thumbs:/data/thumbs:ro
+    command: python -m imgsearch.storage.s3 --src /data/index --thumbs /data/thumbs --wait 60
+    healthcheck:
+      disable: true  # job chạy một lần; HEALTHCHECK của image là của api
 
   api:
     image: imgsearch:local
@@ -46,6 +50,10 @@ services:
       INDEX_FROM_S3: "true"
       REQUIRE_INDEX: "true"
       INDEX_DIR: /cache/index
+      # Ảnh có trong index/v{ver}/thumbs.txt: presigned URL tới MinIO, ký bằng địa chỉ trình
+      # duyệt tới được; ảnh còn lại (hoặc chưa chạy make_thumbs.py) hotlink image_url.
+      THUMBS_FROM_S3: "true"
+      S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9000}
       MODELS_DIR: /models
       ONNX_THREADS: "4"  # = cpus bên dưới
       # numpy (OpenBLAS) mặc định mở luồng theo số lõi của máy (22), không theo giới hạn 4 CPU

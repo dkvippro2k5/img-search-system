@@ -20,6 +20,8 @@ import numpy as np
 
 from imgsearch.api.schemas import EvidenceStep, ImageHit, ResultGroup, SearchRequest, SearchResponse
 from imgsearch.config import Settings
+from imgsearch.data.thumbs import LIST_FILE as THUMB_LIST
+from imgsearch.data.thumbs import read_list as read_thumb_list
 from imgsearch.retrieval import guard, multi_hop, multi_intent
 from imgsearch.retrieval import lexicon as lx
 from imgsearch.retrieval.aliases import AliasIndex
@@ -89,6 +91,7 @@ class SearchEngine:
         self._pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="text-dense")
         self.parser = QueryParser(AliasIndex([]))
         self.unsafe_ids: set[str] = set()
+        self.thumb_ids: set[str] = set()  # ảnh có thumbnail trên S3 (thumbs.txt)
         self._s3 = None
 
     def load(self) -> None:
@@ -108,6 +111,9 @@ class SearchEngine:
             )
             self.dense = self._load_dense()
             self.text_dense = self._load_text_dense()
+            if self.settings.thumbs_from_s3:
+                self.thumb_ids = read_thumb_list(self.settings.index_path / THUMB_LIST)
+                log.info("Thumbnail S3: %d ảnh, còn lại hotlink", len(self.thumb_ids))
             log.info(
                 "Đã nạp %s: %d ảnh, %d person, %d ảnh bị lọc an toàn",
                 meta,
@@ -524,9 +530,9 @@ class SearchEngine:
     def _thumb_url(self, row: dict) -> str:
         if self.settings.local_images:
             return f"/img/{row['image_id']}"
-        if self.settings.thumbs_from_s3:
+        if self.settings.thumbs_from_s3 and row["image_id"] in self.thumb_ids:
             if self._s3 is None:
-                self._s3 = s3.client(self.settings)
+                self._s3 = s3.client(self.settings, public=True)
             return s3.presigned_thumb_url(self.settings, row["image_id"], self._s3)
         return row["image_url"] or ""
 

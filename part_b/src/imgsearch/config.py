@@ -26,8 +26,12 @@ class Settings(BaseSettings):
     s3_secret_access_key: str | None = None
     s3_region: str = "us-east-1"
     presign_ttl_seconds: int = 600
+    # Địa chỉ S3 mà trình duyệt tới được, dùng để ký presigned URL thumbnail. Bỏ trống: như
+    # S3_ENDPOINT_URL (R2/AWS). Compose: http://localhost:9000 (API gọi MinIO qua minio:9000).
+    s3_public_endpoint_url: str | None = None
     # False: hiển thị bằng image_url gốc (hotlink, PLAN 7.2 [Cần xác nhận]);
-    # True: presigned URL tới thumbs/{sha256[:2]}/{sha256}.webp trên S3.
+    # True: presigned URL tới thumbs/{sha256[:2]}/{sha256}.webp trên S3, chỉ cho ảnh có trong
+    # index/v{ver}/thumbs.txt (scripts/make_thumbs.py); ảnh còn lại vẫn hotlink.
     thumbs_from_s3: bool = False
     # Demo cục bộ: ảnh lấy từ ảnh đã tải trên máy (data/raw/fetched, fetch_missing_images.py)
     # qua /img/{image_id}, không có thì chuyển hướng tới image_url. Hotlink hỏng 9–19% ảnh do
